@@ -5,19 +5,43 @@ import java.io.Writer;
 /**
  * Builds the preamble and title block of the master document from a manifest.
  *
- * <p>Package choices favour portability: everything here ships with a basic
- * TeX Live or MiKTeX install, and the admonition environment is defined with
- * plain {@code \newenvironment} rather than pulling in tcolorbox or mdframed.
+ * <p>Package choices favour portability: everything here ships with a basic TeX Live or MiKTeX
+ * install, and the admonition environment is defined with plain {@code \newenvironment} rather than
+ * pulling in tcolorbox or mdframed.
  */
 public final class Preamble {
 
-    private Preamble() {
-    }
+    private Preamble() {}
 
     /**
-     * @param withIndex when true, load makeidx and open the .idx file. Left
-     *                  out entirely otherwise, so a book with no index terms
-     *                  still compiles in a single pdflatex pass.
+     * The untitled companion to style.tex's {@code admonition}, needed by a Markua {@code B>}
+     * blurb, which has no heading of its own.
+     *
+     * <p>Written here rather than into style.tex because style.tex belongs to the book: it is
+     * written once and then edited by hand, so a book made before this existed would not have the
+     * definition. The master document is regenerated on every run, and the guard keeps a style.tex
+     * that does define it from clashing.
+     */
+    private static final String ADMONITION_PLAIN =
+            """
+
+            % An admonition with no heading (Markua 'B>' blurbs). Defined only if
+            % style.tex has not already done so.
+            \\makeatletter
+            \\@ifundefined{admonitionplain}{%
+              \\newenvironment{admonitionplain}{%
+                \\par\\medskip\\noindent\\rule{\\linewidth}{0.4pt}\\par\\nobreak\\smallskip
+                \\noindent\\ignorespaces
+              }{%
+                \\par\\smallskip\\noindent\\rule{\\linewidth}{0.4pt}\\par\\medskip
+              }%
+            }{}
+            \\makeatother
+            """;
+
+    /**
+     * @param withIndex when true, load makeidx and open the .idx file. Left out entirely otherwise,
+     *     so a book with no index terms still compiles in a single pdflatex pass.
      */
     public static void beginTheBook(Manifest manifest, Writer w) throws Exception {
         Manifest.Document doc = manifest.document();
@@ -31,6 +55,7 @@ public final class Preamble {
         w.write("% =====================================================================\n\n");
 
         w.write("\\input{style.tex}\n");
+        w.write(ADMONITION_PLAIN);
 
         if (!manifest.extraPreamble().isEmpty()) {
             w.write("% Extra preamble lines from the manifest\n");
@@ -57,7 +82,10 @@ public final class Preamble {
         if (doc.toc()) {
             w.write("\\tableofcontents\n\\clearpage\n\n");
         }
-        w.write("\\mainmatter\n\n");
+        // \frontmatter stays open here. Anything in the manifest's frontMatter
+        // section is written next, and BookBuilder closes the section with
+        // \mainmatter once those are done - so a foreword comes out unnumbered
+        // and on roman page numbers, which is what \frontmatter is for.
     }
 
     private static String titleBlock(Manifest manifest) {
@@ -73,16 +101,22 @@ public final class Preamble {
      */
     public static void endTheBook(Manifest manifest, Writer w) throws Exception {
 
-        boolean twoSide = manifest != null && manifest.document().twoSide();
+        // \appendix is not written here: it belongs immediately before the
+        // appendices themselves, and BookBuilder emits it there, only when the
+        // manifest actually lists any.
         w.write("\n");
-        w.write("\\appendix\n\n");
         w.write("\\backmatter\n\n");
 
         // theindex opens with \twocolumn, which clears the page. Break first so
         // \addcontentsline records the index's own page rather than the one
         // before it, and anchor with \phantomsection or hyperref would point
         // the contents link at the last section instead.
-        w.write(twoSide ? "\\cleardoublepage\n" : "\\clearpage\n");
+        //
+        // \phantomsection belongs to hyperref, which style.tex is free not to
+        // load. It exists only to aim a hyperlink, so where there are no links
+        // to aim, doing nothing is exactly right.
+        w.write("\\providecommand{\\phantomsection}{}\n");
+        w.write("\\cleardoublepage\n");
         w.write("\\phantomsection\n");
         w.write("\\addcontentsline{toc}{chapter}{\\indexname}\n");
         w.write("\\printindex\n");

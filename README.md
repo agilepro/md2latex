@@ -45,16 +45,16 @@ one `*.manifest`.
 **3. Compile the PDF.** The exact command is printed at the end of every build:
 
 ```bash
-cd latex && pdflatex book.tex
+cd latex && xelatex book.tex
 ```
 
 If the book has an index, `makeindex` has to run between two passes:
 
 ```bash
-cd latex && pdflatex book.tex && makeindex book && pdflatex book.tex
+cd latex && xelatex book.tex && makeindex book && xelatex book.tex
 ```
 
-Add `-v` to list each chapter file as it is written, `--help` for full usage.
+Add `-v` to list each chapter file as it is written, `--help` for full usage.  The LaTeX variant `xelatex` is preferred because it handles unicode characters better.
 
 ## The manifest
 
@@ -74,29 +74,30 @@ output:
 
 document:
   class:       book           # book | report | article
-  fontSize:    11pt
-  paperSize:   a4paper
-  geometry:    margin=1in
   toc:         true
   tocDepth:    2
   numberDepth: 2
-  twoSide:     false
 
 code: listings                # listings | minted | verbatim
+dialect: docusaurus           # docusaurus | markua
 
 preamble:                     # raw lines appended to the preamble
   - \usepackage{microtype}
 
-chapters:                     # order here is the order in the book
+frontMatter: 
   - introduction.md
+
+chapters:                     # order here is the order in the book
+  - chapter1.md
   - file:  definitions.md
     title: Terms of Discussion    # overrides the file's H1
   - part:  Part Two               # a \part divider, reads no file
+
+appendices:
   - ../shared/appendix.md         # a file outside the folder is fine
 ```
 
-Key names ignore case, underscores and hyphens, so `fontSize`, `font_size` and
-`font-size` all work. An unrecognised key is an error rather than being silently
+An unrecognized key is an error rather than being silently
 ignored, which catches typos like `autor:`.
 
 ## Markdown front matter
@@ -132,6 +133,63 @@ Headings, emphasis, lists, block quotes, tables, images, footnotes, task lists,
 strikethrough, links, and fenced code blocks. Docusaurus `:::tip[Title]`
 admonitions become a framed block. Relative `.md` links keep their text and drop
 the unresolvable target.
+
+## Markua
+
+Set `dialect: markua` in the manifest and two more pieces of syntax are
+recognized. It is opt-in because both are ordinary prose in plain Markdown — a
+line starting `A>` is just text, and `{i: ...}` is just a word in braces — so
+turning them on unconditionally would silently rewrite existing documents.
+Docusaurus `:::` admonitions keep working when it is on, so a folder holding
+both kinds of source converts in one run.
+
+**Blurbs**, in both the fenced form and the older line-prefix form:
+
+```markdown
+{blurb, class: warning}
+Mind the gap.
+{/blurb}
+
+W> Mind the gap.
+```
+
+Both become the same framed block as a `:::warning` admonition, headed with the
+class name. `{aside}` and `{blurb, class: X}` are equivalent to `A>` and `X>`,
+and `{/aside}` and `{/blurb}` both close either one. The letters are `A` aside,
+`W` warning, `T` tip, `E` error, `I` information, `Q` question, `D` discussion,
+`X` exercise, `B` a blurb with no heading, and `C` a centred block. A run of
+prefixed lines is one blurb; a bare `A>` inside it starts a new paragraph, and
+the first line without the prefix ends it. Blurb contents are still Markdown,
+fenced code included. Blurbs do not nest.
+
+`B>` needs an untitled companion to style.tex's `admonition` environment. It is
+written into the master document rather than into style.tex, guarded so that a
+style.tex which does define it wins, so a book made before this existed still
+compiles.
+
+**Index markers**, which place an entry exactly where you want it:
+
+```markdown
+Early societies organised themselves by tribe{i: "tribe"}.
+```
+
+The term may be quoted or bare, and `!` separates an entry from its sub-entry,
+so `{i: "tribe!kinship"}` indexes *kinship* under *tribe*. Markers work
+anywhere — including in headings, where the entry is moved past the closing
+brace because a sectioning command is a moving argument, and inside footnotes
+and table cells, where the automatic matching described above is suppressed.
+They are ignored inside fenced code blocks and inside code spans, and `\{i: ...}`
+is a literal one. An *indented* code block is not detected, so write a literal
+marker in a fenced block.
+
+This is the same machinery as the front-matter `indexTerms:` list and the two
+mix freely. Markers are the better tool when a word appears often but should be
+indexed at one particular place. `" | @` are rejected, as they are in
+`indexTerms`; `!` is allowed here because you are writing the entry by hand.
+
+Attribute lists on images, code blocks and tables, cross references, and part
+and matter structure attributes are **not** supported. A `{width: 40%}` line
+above an image is passed through as ordinary text.
 
 ## When it refuses
 
@@ -202,7 +260,8 @@ converter/
       ManifestScaffold.java   --init
       BookBuilder.java     converts every chapter, then writes the file set
       Md2Latex.java        one Markdown document to a LaTeX fragment
-      Preprocessor.java    front matter and admonitions, with a line map
+      MarkdownLoader.java  front matter, admonitions and Markua, with a line map
+      Dialect.java         which non-CommonMark syntax is recognised
       LatexVisitor.java    the AST walk that emits LaTeX
       LatexEscaper.java    escaping
       LatexSafety.java     what pdflatex can actually typeset
@@ -210,5 +269,5 @@ converter/
       CharacterMap.java    Unicode to LaTeX translation table
       Preamble.java        preamble and document wrapper
       Problem.java / ConversionException.java   located errors
-  src/test/java/...        164 tests
+  src/test/java/...        190 tests
 ```

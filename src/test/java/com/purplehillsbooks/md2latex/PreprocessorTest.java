@@ -1,16 +1,18 @@
 package com.purplehillsbooks.md2latex;
 
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import org.junit.jupiter.api.Test;
 
 class PreprocessorTest {
 
     @Test
     void extractsFrontMatterAndStripsIt() {
-        MarkdownLoader.Result r = MarkdownLoader.process("""
+        MarkdownLoader.Result r =
+                MarkdownLoader.process(
+                        """
                 ---
                 sidebar_position: 3
                 title: What is a Good Action?
@@ -26,7 +28,9 @@ class PreprocessorTest {
     void toleratesIndentedFrontMatterKeys() {
         // The docs in this repo indent their front matter, which is not
         // strictly valid YAML but is common in hand-written files.
-        MarkdownLoader.Result r = MarkdownLoader.process("""
+        MarkdownLoader.Result r =
+                MarkdownLoader.process(
+                        """
                 ---
                   sidebar_position: 7
                 ---
@@ -44,7 +48,9 @@ class PreprocessorTest {
 
     @Test
     void rewritesAdmonitionWithTitle() {
-        MarkdownLoader.Result r = MarkdownLoader.process("""
+        MarkdownLoader.Result r =
+                MarkdownLoader.process(
+                        """
                 :::tip[Key Takeaway]
 
                 Body text.
@@ -67,7 +73,9 @@ class PreprocessorTest {
 
     @Test
     void leavesColonsInsideCodeFencesAlone() {
-        MarkdownLoader.Result r = MarkdownLoader.process("""
+        MarkdownLoader.Result r =
+                MarkdownLoader.process(
+                        """
                 ```
                 :::tip
                 :::

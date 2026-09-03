@@ -3,13 +3,13 @@ package com.purplehillsbooks.md2latex;
 import java.util.List;
 
 /**
- * Thrown when one or more source files contain something that would produce
- * LaTeX that will not compile, or that would silently drop content.
+ * Thrown when one or more source files contain something that would produce LaTeX that will not
+ * compile, or that would silently drop content.
  *
- * <p>Every problem found across every chapter is collected before this is
- * thrown, so one run tells the author everything they need to fix rather than
- * revealing faults one build at a time. No output files are written when this
- * is thrown, so a failed build never leaves a half-written book behind.
+ * <p>Every problem found across every chapter is collected before this is thrown, so one run tells
+ * the author everything they need to fix rather than revealing faults one build at a time. No
+ * output files are written when this is thrown, so a failed build never leaves a half-written book
+ * behind.
  */
 public class ConversionException extends Exception {
 
@@ -32,17 +32,18 @@ public class ConversionException extends Exception {
 
         StringBuilder b = new StringBuilder();
         b.append("conversion stopped: ")
-         .append(errors.size())
-         .append(errors.size() == 1 ? " problem" : " problems")
-         .append(" in the Markdown would produce LaTeX that does not compile.\n");
+                .append(errors.size())
+                .append(errors.size() == 1 ? " problem" : " problems")
+                .append(" in the Markdown would produce LaTeX that does not compile.\n");
 
         for (Problem p : errors) {
             b.append('\n').append(p.format()).append('\n');
         }
         if (!warnings.isEmpty()) {
-            b.append("\nAlso ").append(warnings.size())
-             .append(warnings.size() == 1 ? " warning" : " warnings")
-             .append(":\n");
+            b.append("\nAlso ")
+                    .append(warnings.size())
+                    .append(warnings.size() == 1 ? " warning" : " warnings")
+                    .append(":\n");
             for (Problem p : warnings) {
                 b.append('\n').append(p.format()).append('\n');
             }

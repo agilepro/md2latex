@@ -1,0 +1,1 @@
+java -jar target/md2latex.jar %1

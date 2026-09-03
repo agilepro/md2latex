@@ -4,21 +4,20 @@ package com.purplehillsbooks.md2latex;
 public enum CodeStyle {
 
     /**
-     * The {@code listings} package. Needs no special compiler flags, but only
-     * knows a fixed set of languages (see {@link ListingsLanguages}).
+     * The {@code listings} package. Needs no special compiler flags, but only knows a fixed set of
+     * languages (see {@link ListingsLanguages}).
      */
     LISTINGS,
 
     /**
-     * The {@code minted} package. Much better highlighting and far broader
-     * language coverage via Pygments, but requires Python plus running
-     * pdflatex with {@code -shell-escape}.
+     * The {@code minted} package. Much better highlighting and far broader language coverage via
+     * Pygments, but requires Python plus running pdflatex with {@code -shell-escape}.
      */
     MINTED,
 
     /**
-     * Plain {@code verbatim}. Maximum portability, no highlighting, and it
-     * breaks if the code itself contains {@code \end{verbatim}}.
+     * Plain {@code verbatim}. Maximum portability, no highlighting, and it breaks if the code
+     * itself contains {@code \end{verbatim}}.
      */
     VERBATIM;
 
@@ -27,8 +26,11 @@ public enum CodeStyle {
             case "listings", "lstlisting" -> LISTINGS;
             case "minted" -> MINTED;
             case "verbatim" -> VERBATIM;
-            default -> throw new IllegalArgumentException(
-                    "Unknown code style '" + s + "' (expected listings, minted or verbatim)");
+            default ->
+                    throw new IllegalArgumentException(
+                            "Unknown code style '"
+                                    + s
+                                    + "' (expected listings, minted or verbatim)");
         };
     }
 }

@@ -1,8 +1,8 @@
 package com.purplehillsbooks.md2latex;
 
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import org.junit.jupiter.api.Test;
 
 class LatexEscaperTest {
 
@@ -35,8 +35,8 @@ class LatexEscaperTest {
 
     @Test
     void urlEscapingIsMinimal() {
-        assertEquals("https://x.test/a\\%20b\\#frag",
-                LatexEscaper.url("https://x.test/a%20b#frag"));
+        assertEquals(
+                "https://x.test/a\\%20b\\#frag", LatexEscaper.url("https://x.test/a%20b#frag"));
     }
 
     @Test

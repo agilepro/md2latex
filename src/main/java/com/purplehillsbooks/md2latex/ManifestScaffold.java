@@ -12,48 +12,45 @@ import java.util.stream.Stream;
 /**
  * Writes a starter manifest for a directory that already contains Markdown.
  *
- * <p>Chapter order is taken from the {@code sidebar_position} front matter when
- * present, falling back to filename, which reproduces the reading order of a
- * Docusaurus site. The result is meant to be edited, not treated as final.
+ * <p>Chapter order is taken from the {@code sidebar_position} front matter when present, falling
+ * back to filename, which reproduces the reading order of a Docusaurus site. The result is meant to
+ * be edited, not treated as final.
  */
 public final class ManifestScaffold {
 
-    private ManifestScaffold() {
-    }
+    private ManifestScaffold() {}
 
     /**
-     * @param sourceDir    directory to scan for Markdown
+     * @param sourceDir directory to scan for Markdown
      * @param manifestFile where the manifest is written
-     * @param title        book title to seed the manifest with
+     * @param title book title to seed the manifest with
      * @return the number of chapters listed
      */
     public static int write(Path sourceDir, Path manifestFile, String title) throws IOException {
         List<Path> files;
         try (Stream<Path> walk = Files.walk(sourceDir)) {
-            files = walk.filter(Files::isRegularFile)
-                    .filter(ManifestScaffold::isMarkdown)
-                    .toList();
+            files = walk.filter(Files::isRegularFile).filter(ManifestScaffold::isMarkdown).toList();
         }
         if (files.isEmpty()) {
             throw new IOException("no .md files found under " + sourceDir);
         }
 
-        record Candidate(Path path, String relative, int position, String heading) {
-        }
+        record Candidate(Path path, String relative, int position, String heading) {}
 
         List<Candidate> candidates = new ArrayList<>();
         for (Path file : files) {
             String text = Files.readString(file, StandardCharsets.UTF_8);
             MarkdownLoader.Result parsed = MarkdownLoader.process(text);
-            candidates.add(new Candidate(
-                    file,
-                    sourceDir.relativize(file).toString().replace('\\', '/'),
-                    parsed.sidebarPosition(),
-                    firstHeading(parsed.body())));
+            candidates.add(
+                    new Candidate(
+                            file,
+                            sourceDir.relativize(file).toString().replace('\\', '/'),
+                            parsed.sidebarPosition(),
+                            firstHeading(parsed.body())));
         }
-        candidates.sort(Comparator
-                .comparingInt(Candidate::position)
-                .thenComparing(c -> c.relative().toLowerCase()));
+        candidates.sort(
+                Comparator.comparingInt(Candidate::position)
+                        .thenComparing(c -> c.relative().toLowerCase()));
 
         Path manifestDir = manifestFile.toAbsolutePath().normalize().getParent();
 
@@ -72,18 +69,19 @@ public final class ManifestScaffold {
         y.append("  main:      book.tex\n");
         y.append("document:\n");
         y.append("  class:       book        # book | report | article\n");
-        y.append("  fontSize:    11pt\n");
-        y.append("  paperSize:   a4paper\n");
-        y.append("  geometry:    margin=1in\n");
         y.append("  toc:         true\n");
         y.append("  tocDepth:    2\n");
         y.append("  numberDepth: 2\n");
-        y.append("  twoSide:     false\n\n");
         y.append("# How fenced code blocks are rendered: listings | minted | verbatim\n");
         y.append("code: listings\n\n");
         y.append("# Raw lines appended to the preamble, e.g.\n");
         y.append("# preamble:\n");
         y.append("#   - \\usepackage{microtype}\n\n");
+        y.append("# Chapter-like files that belong in the front matter, before\n");
+        y.append("# \\mainmatter: a foreword, a preface, acknowledgements. Unnumbered\n");
+        y.append("# and on roman page numbers. Same entry format as 'chapters'.\n");
+        y.append("# frontMatter:\n");
+        y.append("#   - foreword.md\n\n");
         y.append("# Chapters, in book order, relative to this file. Either a bare\n");
         y.append("# filename, or a mapping with 'file' plus an optional 'title' that\n");
         y.append("# overrides the H1. A mapping with 'part' inserts a part divider\n");
@@ -97,6 +95,11 @@ public final class ManifestScaffold {
             }
             y.append('\n');
         }
+
+        y.append("\n# Appendices, after \\appendix, lettered rather than numbered.\n");
+        y.append("# Same entry format as 'chapters'.\n");
+        y.append("# appendices:\n");
+        y.append("#   - appendix-a.md\n");
 
         Files.createDirectories(manifestDir);
         Files.writeString(manifestFile, y.toString(), StandardCharsets.UTF_8);
@@ -124,8 +127,8 @@ public final class ManifestScaffold {
 
     private static String relativize(Path from, Path to) {
         try {
-            String r = from.relativize(to.toAbsolutePath().normalize())
-                    .toString().replace('\\', '/');
+            String r =
+                    from.relativize(to.toAbsolutePath().normalize()).toString().replace('\\', '/');
             return r.isEmpty() ? "." : r;
         } catch (IllegalArgumentException e) {
             return to.toAbsolutePath().normalize().toString().replace('\\', '/');

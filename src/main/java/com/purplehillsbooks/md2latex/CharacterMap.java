@@ -6,29 +6,26 @@ import java.util.Map;
 /**
  * Built-in translations from Unicode characters to LaTeX.
  *
- * <p>pdflatex cannot typeset most characters outside Latin Extended-A, but many
- * of them have an exact, unambiguous LaTeX equivalent: an arrow is
- * {@code \rightarrow}, a Greek alpha is {@code \alpha}. Those need no decision
- * from the author, so they are translated here rather than being rejected.
+ * <p>pdflatex cannot typeset most characters outside Latin Extended-A, but many of them have an
+ * exact, unambiguous LaTeX equivalent: an arrow is {@code \rightarrow}, a Greek alpha is {@code
+ * \alpha}. Those need no decision from the author, so they are translated here rather than being
+ * rejected.
  *
- * <p>Characters with no sensible equivalent - emoji, pictographs, other scripts
- * - are deliberately absent, and remain conversion errors reported against the
- * line that used them.
+ * <p>Characters with no sensible equivalent - emoji, pictographs, other scripts - are deliberately
+ * absent, and remain conversion errors reported against the line that used them.
  *
- * <p>Every command used here comes from base LaTeX or from {@code amssymb},
- * both of which the generated preamble already loads. Math symbols are wrapped
- * in {@code \ensuremath} so they work whether or not the surrounding text is
- * already in math mode.
+ * <p>Every command used here comes from base LaTeX or from {@code amssymb}, both of which the
+ * generated preamble already loads. Math symbols are wrapped in {@code \ensuremath} so they work
+ * whether or not the surrounding text is already in math mode.
  *
- * <p>Keyed on code point rather than {@code char} so characters outside the
- * basic plane are handled whole rather than as surrogate halves.
+ * <p>Keyed on code point rather than {@code char} so characters outside the basic plane are handled
+ * whole rather than as surrogate halves.
  */
 public final class CharacterMap {
 
     private static final Map<Integer, String> REPLACEMENTS = build();
 
-    private CharacterMap() {
-    }
+    private CharacterMap() {}
 
     /** The LaTeX for a code point, or null when there is no translation. */
     public static String replacement(int codePoint) {
@@ -99,11 +96,11 @@ public final class CharacterMap {
         math(m, '\u2205', "emptyset");
         math(m, '\u2200', "forall");
         math(m, '\u2203', "exists");
-        math(m, '\u2204', "nexists");          // amssymb
+        math(m, '\u2204', "nexists"); // amssymb
         math(m, '\u2227', "land");
         math(m, '\u2228', "lor");
-        math(m, '\u2234', "therefore");        // amssymb
-        math(m, '\u2235', "because");          // amssymb
+        math(m, '\u2234', "therefore"); // amssymb
+        math(m, '\u2235', "because"); // amssymb
         math(m, '\u22A2', "vdash");
         math(m, '\u22A8', "models");
 
@@ -116,9 +113,9 @@ public final class CharacterMap {
 
         // ---- Greek, lower case -------------------------------------------
         String[] lower = {
-            "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta",
-            "iota", "kappa", "lambda", "mu", "nu", "xi", null, "pi",
-            "rho", null, "sigma", "tau", "upsilon", "phi", "chi", "psi", "omega"
+            "alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta", "iota", "kappa",
+            "lambda", "mu", "nu", "xi", null, "pi", "rho", null, "sigma", "tau", "upsilon", "phi",
+            "chi", "psi", "omega"
         };
         for (int i = 0; i < lower.length; i++) {
             if (lower[i] != null) {
@@ -144,16 +141,16 @@ public final class CharacterMap {
         math(m, '\u03A9', "Omega");
 
         // ---- Marks and shapes --------------------------------------------
-        math(m, '\u2713', "checkmark");        // amssymb
+        math(m, '\u2713', "checkmark"); // amssymb
         math(m, '\u2714', "checkmark");
         math(m, '\u2717', "times");
         math(m, '\u2718', "times");
         math(m, '\u2715', "times");
-        math(m, '\u25A1', "square");           // amssymb
-        math(m, '\u25A0', "blacksquare");      // amssymb
+        math(m, '\u25A1', "square"); // amssymb
+        math(m, '\u25A0', "blacksquare"); // amssymb
         math(m, '\u25CB', "circ");
         math(m, '\u25B3', "triangle");
-        math(m, '\u2605', "bigstar");          // amssymb
+        math(m, '\u2605', "bigstar"); // amssymb
         math(m, '\u2606', "star");
         math(m, '\u2661', "heartsuit");
         math(m, '\u2665', "heartsuit");
@@ -179,8 +176,8 @@ public final class CharacterMap {
         text(m, '\u2002', "\\enspace{}");
         text(m, '\u2003', "\\quad{}");
         text(m, '\u2009', "\\,");
-        text(m, '\u200B', "");                 // zero-width space: drop
-        text(m, '\uFEFF', "");                 // byte-order mark: drop
+        text(m, '\u200B', ""); // zero-width space: drop
+        text(m, '\uFEFF', ""); // byte-order mark: drop
 
         // Fractions LaTeX has no single glyph for.
         text(m, '\u2153', "\\ensuremath{1/3}");

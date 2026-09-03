@@ -1,5 +1,18 @@
 package com.purplehillsbooks.md2latex;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Deque;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.commonmark.ext.footnotes.FootnoteDefinition;
 import org.commonmark.ext.footnotes.FootnoteReference;
 import org.commonmark.ext.footnotes.InlineFootnote;
@@ -37,38 +50,35 @@ import org.commonmark.node.StrongEmphasis;
 import org.commonmark.node.Text;
 import org.commonmark.node.ThematicBreak;
 
-import java.io.ByteArrayOutputStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Locale;
-import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
 /**
  * Walks a CommonMark AST and emits LaTeX.
  *
- * <p>This is a visitor rather than a {@code NodeRenderer} on purpose: the
- * renderer machinery in commonmark-java is built around producing HTML, whereas
- * a foreign output format is served better by walking the tree directly.
+ * <p>This is a visitor rather than a {@code NodeRenderer} on purpose: the renderer machinery in
+ * commonmark-java is built around producing HTML, whereas a foreign output format is served better
+ * by walking the tree directly.
  *
- * <p>Nested instances sharing one {@link RenderContext} are used to render
- * subtrees out of order, which footnotes and table cells both require.
+ * <p>Nested instances sharing one {@link RenderContext} are used to render subtrees out of order,
+ * which footnotes and table cells both require.
  */
 public final class LatexVisitor extends AbstractVisitor {
 
-    private static final Pattern ADM_BEGIN =
-            Pattern.compile("data-adm=\"begin\"");
-    private static final Pattern ADM_END =
-            Pattern.compile("data-adm=\"end\"");
-    private static final Pattern ADM_KIND =
-            Pattern.compile("data-kind=\"([^\"]*)\"");
-    private static final Pattern ADM_TITLE =
-            Pattern.compile("data-title=\"([^\"]*)\"");
+    private static final Pattern ADM_BEGIN = Pattern.compile("data-adm=\"begin\"");
+    private static final Pattern ADM_END = Pattern.compile("data-adm=\"end\"");
+    private static final Pattern ADM_KIND = Pattern.compile("data-kind=\"([^\"]*)\"");
+    private static final Pattern ADM_TITLE = Pattern.compile("data-title=\"([^\"]*)\"");
+
+    /** Marks a Markua blurb that carries no heading of its own. */
+    private static final Pattern ADM_UNTITLED = Pattern.compile("data-untitled=\"1\"");
+
+    /** Markua inline index marker, planted by {@link MarkdownLoader}. */
+    private static final Pattern INDEX_MARKER = Pattern.compile("data-index=\"([^\"]*)\"");
+
+    /**
+     * Characters makeindex reserves that cannot be escaped on the way through. The same set {@link
+     * IndexTerms} rejects, less {@code !}, which an author writing a marker by hand uses
+     * deliberately to make a sub-entry.
+     */
+    private static final String INDEX_RESERVED = "\"|@";
 
     /** Escape hatch: {@code <!-- latex: \clearpage -->} is emitted verbatim. */
     private static final Pattern RAW_LATEX =
@@ -90,11 +100,28 @@ public final class LatexVisitor extends AbstractVisitor {
     private boolean suppressIndex;
 
     /**
-     * Index terms already emitted in the current section. Repeating an entry for
-     * every paragraph turns a common word into an unreadable run of page
-     * numbers, so each term is recorded once per section.
+     * Index terms already emitted in the current section. Repeating an entry for every paragraph
+     * turns a common word into an unreadable run of page numbers, so each term is recorded once per
+     * section.
      */
     private final Set<String> indexedInSection = new HashSet<>();
+
+    /**
+     * Environments opened by an admonition or blurb begin-marker, so the matching end-marker closes
+     * the right one. A deque rather than a field because it costs nothing and stays correct if
+     * markers ever do nest.
+     */
+    private final Deque<String> openBlocks = new ArrayDeque<>();
+
+    /**
+     * Index entries from markers found inside the current heading. A sectioning command is a moving
+     * argument, so they are held here and emitted after the closing brace with the ones matched
+     * automatically.
+     */
+    private final List<String> headingIndexEntries = new ArrayList<>();
+
+    /** True while rendering the text of a heading. */
+    private boolean inHeading;
 
     public LatexVisitor(RenderContext ctx) {
         this.ctx = ctx;
@@ -117,10 +144,13 @@ public final class LatexVisitor extends AbstractVisitor {
 
         sb.append('\\').append(ctx.headingCommand(heading.getLevel())).append('{');
         String override = heading.getLevel() == 1 ? ctx.takeTitleOverride() : null;
+        headingIndexEntries.clear();
         if (override != null) {
             sb.append(LatexEscaper.text(override));
         } else {
+            inHeading = true;
             visitChildren(heading);
+            inHeading = false;
         }
         sb.append('}');
 
@@ -129,15 +159,18 @@ public final class LatexVisitor extends AbstractVisitor {
             indexedInSection.clear();
         }
 
-        List<IndexTerms.Term> hits =
-                claimIndexTerms(shown != null ? shown : indexText(heading));
-        if (!hits.isEmpty()) {
+        List<IndexTerms.Term> hits = claimIndexTerms(shown != null ? shown : indexText(heading));
+        if (!hits.isEmpty() || !headingIndexEntries.isEmpty()) {
             // After the closing brace, never inside it: a sectioning command is
             // a moving argument, and \index is fragile there. \nobreak undoes
             // the page break that the index whatsit would otherwise legalise
             // between a heading and its first line.
             sb.append("%\n");
             appendIndexEntries(hits);
+            for (String entry : headingIndexEntries) {
+                sb.append(entry);
+            }
+            headingIndexEntries.clear();
             sb.append("\\nobreak%");
         }
         sb.append("\n\n");
@@ -145,9 +178,8 @@ public final class LatexVisitor extends AbstractVisitor {
 
     @Override
     public void visit(Paragraph paragraph) {
-        List<IndexTerms.Term> hits = indexingAllowed()
-                ? claimIndexTerms(indexText(paragraph))
-                : List.of();
+        List<IndexTerms.Term> hits =
+                indexingAllowed() ? claimIndexTerms(indexText(paragraph)) : List.of();
         if (!hits.isEmpty()) {
             // \leavevmode starts the paragraph first, so the \index whatsit
             // lands inside the first line box and records that line's page.
@@ -194,21 +226,25 @@ public final class LatexVisitor extends AbstractVisitor {
         }
         switch (ctx.codeStyle()) {
             case MINTED -> {
-                String lang = (info == null || info.isBlank())
-                        ? "text"
-                        : info.trim().split("\\s+")[0].toLowerCase(Locale.ROOT);
-                sb.append("\\begin{minted}{").append(lang).append("}\n")
-                  .append(body)
-                  .append("\\end{minted}\n\n");
+                String lang =
+                        (info == null || info.isBlank())
+                                ? "text"
+                                : info.trim().split("\\s+")[0].toLowerCase(Locale.ROOT);
+                sb.append("\\begin{minted}{")
+                        .append(lang)
+                        .append("}\n")
+                        .append(body)
+                        .append("\\end{minted}\n\n");
             }
             case VERBATIM -> {
                 if (body.contains("\\end{verbatim}")) {
-                    ctx.error(node,
+                    ctx.error(
+                            node,
                             "this code block contains the literal text \\end{verbatim}, "
-                            + "which would close the verbatim environment early and "
-                            + "break the build",
+                                    + "which would close the verbatim environment early and "
+                                    + "break the build",
                             "set 'code: listings' in the manifest, which has no such "
-                            + "restriction, or remove that text from the code block");
+                                    + "restriction, or remove that text from the code block");
                 }
                 sb.append("\\begin{verbatim}\n").append(body).append("\\end{verbatim}\n\n");
             }
@@ -260,10 +296,14 @@ public final class LatexVisitor extends AbstractVisitor {
     private void enterList(Node list) {
         listDepth++;
         if (listDepth == LatexSafety.MAX_LIST_DEPTH + 1) {
-            ctx.error(list,
-                    "list is nested " + listDepth + " levels deep, but LaTeX allows at "
-                    + "most " + LatexSafety.MAX_LIST_DEPTH
-                    + " ('Too deeply nested' would stop the build)",
+            ctx.error(
+                    list,
+                    "list is nested "
+                            + listDepth
+                            + " levels deep, but LaTeX allows at "
+                            + "most "
+                            + LatexSafety.MAX_LIST_DEPTH
+                            + " ('Too deeply nested' would stop the build)",
                     "flatten the deepest level, or promote it into its own subsection");
         }
     }
@@ -286,25 +326,111 @@ public final class LatexVisitor extends AbstractVisitor {
         String literal = html.getLiteral() == null ? "" : html.getLiteral();
 
         if (ADM_BEGIN.matcher(literal).find()) {
-            String kind = group(ADM_KIND, literal, "note");
-            String title = group(ADM_TITLE, literal, null);
-            String display = title != null && !title.isBlank()
-                    ? MarkdownLoader.unattr(title)
-                    : capitalize(MarkdownLoader.unattr(kind));
-            sb.append("\\begin{admonition}{").append(LatexEscaper.text(display)).append("}\n");
+            beginAdmonition(literal);
             return;
         }
         if (ADM_END.matcher(literal).find()) {
             trimTrailingBlankLine();
-            sb.append("\\end{admonition}\n\n");
+            sb.append("\\end{")
+                    .append(openBlocks.isEmpty() ? "admonition" : openBlocks.pop())
+                    .append("}\n\n");
+            return;
+        }
+        if (emitIndexMarkerIfPresent(html, literal)) {
             return;
         }
         emitRawLatexIfPresent(literal);
     }
 
+    /**
+     * Opens the environment a begin-marker asks for. A Markua {@code C>} block is centred rather
+     * than framed, and a plain {@code B>} blurb has no heading of its own, so each gets its own
+     * environment; everything else is the titled {@code admonition} that Docusaurus blocks already
+     * use.
+     */
+    private void beginAdmonition(String literal) {
+        String kind = MarkdownLoader.unattr(group(ADM_KIND, literal, "note"));
+        String title = group(ADM_TITLE, literal, null);
+        boolean untitled = title == null && ADM_UNTITLED.matcher(literal).find();
+
+        if (MarkdownLoader.KIND_CENTER.equalsIgnoreCase(kind) && untitled) {
+            openBlocks.push("center");
+            sb.append("\\begin{center}\n");
+            return;
+        }
+        if (untitled) {
+            openBlocks.push("admonitionplain");
+            sb.append("\\begin{admonitionplain}\n");
+            return;
+        }
+        String display =
+                title != null && !title.isBlank() ? MarkdownLoader.unattr(title) : capitalize(kind);
+        openBlocks.push("admonition");
+        sb.append("\\begin{admonition}{").append(LatexEscaper.text(display)).append("}\n");
+    }
+
     @Override
     public void visit(HtmlInline html) {
-        emitRawLatexIfPresent(html.getLiteral());
+        String literal = html.getLiteral();
+        if (emitIndexMarkerIfPresent(html, literal)) {
+            return;
+        }
+        emitRawLatexIfPresent(literal);
+    }
+
+    /**
+     * Emits the {@code \index} entry behind a Markua {@code {i: "term"}} marker.
+     *
+     * <p>Unlike the terms declared in front matter, a marker is placed by hand at a spot the author
+     * chose, so it is honoured everywhere - including inside footnotes and table cells, where
+     * automatic matching is suppressed.
+     *
+     * @return true when the literal was a marker and has been dealt with
+     */
+    private boolean emitIndexMarkerIfPresent(Node node, String literal) {
+        if (literal == null) {
+            return false;
+        }
+        Matcher m = INDEX_MARKER.matcher(literal);
+        if (!m.find()) {
+            return false;
+        }
+        String term = IndexTerms.normalize(MarkdownLoader.unattr(m.group(1)));
+        if (term.isEmpty()) {
+            ctx.error(
+                    node,
+                    "index marker has no term",
+                    "write the term inside the braces, as in {i: \"tribe\"}");
+            return true;
+        }
+        for (int i = 0; i < term.length(); i++) {
+            char c = term.charAt(i);
+            if (INDEX_RESERVED.indexOf(c) >= 0) {
+                ctx.error(
+                        node,
+                        "index marker '"
+                                + term
+                                + "' contains '"
+                                + c
+                                + "', which makeindex reserves",
+                        "an index marker may not contain any of: "
+                                + INDEX_RESERVED
+                                + " . Use '!' to separate an entry from its sub-entry, "
+                                + "as in {i: \"tribe!in-group\"}");
+                return true;
+            }
+        }
+        checkCharacters(node, term, "index marker");
+        String entry = "\\index{" + LatexEscaper.indexEntry(term) + "}";
+        if (inHeading) {
+            // A sectioning command is a moving argument, where \index is
+            // fragile. Hold the entry back and let visit(Heading) place it
+            // after the closing brace.
+            headingIndexEntries.add(entry);
+        } else {
+            sb.append(entry);
+        }
+        return true;
     }
 
     private void emitRawLatexIfPresent(String literal) {
@@ -377,8 +503,11 @@ public final class LatexVisitor extends AbstractVisitor {
         if (plainText(link).equals(dest)) {
             sb.append("\\url{").append(LatexEscaper.url(dest)).append('}');
         } else {
-            sb.append("\\href{").append(LatexEscaper.url(dest)).append("}{")
-              .append(label).append('}');
+            sb.append("\\href{")
+                    .append(LatexEscaper.url(dest))
+                    .append("}{")
+                    .append(label)
+                    .append('}');
         }
     }
 
@@ -387,27 +516,37 @@ public final class LatexVisitor extends AbstractVisitor {
         String dest = image.getDestination();
 
         if (dest == null || dest.isBlank()) {
-            ctx.error(image, "image has no file path",
+            ctx.error(
+                    image,
+                    "image has no file path",
                     "give the image a path, as in ![caption](picture.png)");
             return;
         }
         if (isExternal(dest)) {
-            ctx.error(image, "image points at a remote URL: " + dest,
+            ctx.error(
+                    image,
+                    "image points at a remote URL: " + dest,
                     "LaTeX cannot download images; save the file next to the "
-                    + "Markdown and reference it by a relative path");
+                            + "Markdown and reference it by a relative path");
             return;
         }
 
         String extension = LatexSafety.extensionOf(dest);
         if (extension.isEmpty()) {
-            ctx.error(image, "image file '" + dest + "' has no extension",
+            ctx.error(
+                    image,
+                    "image file '" + dest + "' has no extension",
                     "add the file extension, for example " + dest + ".png");
             return;
         }
         if (!LatexSafety.isSupportedImageType(extension)) {
-            ctx.error(image,
-                    "image '" + dest + "' is a ." + extension
-                    + " file, which pdflatex cannot include",
+            ctx.error(
+                    image,
+                    "image '"
+                            + dest
+                            + "' is a ."
+                            + extension
+                            + " file, which pdflatex cannot include",
                     "convert it to one of: " + LatexSafety.supportedImageTypes());
             return;
         }
@@ -417,15 +556,17 @@ public final class LatexVisitor extends AbstractVisitor {
 
         if (isBlockImage(image)) {
             sb.append("\\begin{figure}[htbp]\n\\centering\n")
-              .append("\\includegraphics[width=0.9\\linewidth,keepaspectratio]{")
-              .append(LatexEscaper.imagePath(path)).append("}\n");
+                    .append("\\includegraphics[width=0.9\\linewidth,keepaspectratio]{")
+                    .append(LatexEscaper.imagePath(path))
+                    .append("}\n");
             if (!alt.isBlank()) {
                 sb.append("\\caption{").append(LatexEscaper.text(alt)).append("}\n");
             }
             sb.append("\\end{figure}\n");
         } else {
             sb.append("\\includegraphics[height=1em,keepaspectratio]{")
-              .append(LatexEscaper.imagePath(path)).append('}');
+                    .append(LatexEscaper.imagePath(path))
+                    .append('}');
         }
     }
 
@@ -481,10 +622,13 @@ public final class LatexVisitor extends AbstractVisitor {
     private void emitFootnote(Node node, String label) {
         FootnoteDefinition def = ctx.footnote(label);
         if (def == null) {
-            ctx.error(node,
+            ctx.error(
+                    node,
                     "footnote [^" + label + "] is referenced but never defined",
                     "add a definition somewhere in the same file, on its own line: "
-                    + "[^" + label + "]: the footnote text");
+                            + "[^"
+                            + label
+                            + "]: the footnote text");
             return;
         }
         String body = renderChildren(def);
@@ -494,23 +638,25 @@ public final class LatexVisitor extends AbstractVisitor {
     private void emitTable(TableBlock table) {
         int columns = countColumns(table);
         if (columns == 0) {
-            ctx.error(table, "table has no header row, so it cannot be rendered",
+            ctx.error(
+                    table,
+                    "table has no header row, so it cannot be rendered",
                     "give the table a header row and a delimiter row such as |---|---|");
             return;
         }
         int previousColumns = tableColumns;
         tableColumns = columns;
         sb.append("\\begin{table}[htbp]\n\\centering\n\\begin{tabular}{|")
-          .append(columnSpec(table, columns))
-          .append("}\n\\hline\n");
+                .append(columnSpec(table, columns))
+                .append("}\n\\hline\n");
         visitChildren(table);
         sb.append("\\end{tabular}\n\\end{table}\n\n");
         tableColumns = previousColumns;
     }
 
     /**
-     * A body row with more cells than the header would emit an extra {@code &},
-     * which LaTeX reports as "Extra alignment tab has been changed to \cr".
+     * A body row with more cells than the header would emit an extra {@code &}, which LaTeX reports
+     * as "Extra alignment tab has been changed to \cr".
      */
     private void checkRowWidth(TableRow row) {
         int cells = 0;
@@ -520,9 +666,9 @@ public final class LatexVisitor extends AbstractVisitor {
             }
         }
         if (tableColumns > 0 && cells > tableColumns) {
-            ctx.error(row,
-                    "table row has " + cells + " cells but the header defines only "
-                    + tableColumns,
+            ctx.error(
+                    row,
+                    "table row has " + cells + " cells but the header defines only " + tableColumns,
                     "remove the extra cell(s), or add matching columns to the header row");
         }
     }
@@ -552,11 +698,12 @@ public final class LatexVisitor extends AbstractVisitor {
                 cell = cell.getNext();
             }
             if (cell instanceof TableCell tc && tc.getAlignment() != null) {
-                c = switch (tc.getAlignment()) {
-                    case CENTER -> 'c';
-                    case RIGHT -> 'r';
-                    case LEFT -> 'l';
-                };
+                c =
+                        switch (tc.getAlignment()) {
+                            case CENTER -> 'c';
+                            case RIGHT -> 'r';
+                            case LEFT -> 'l';
+                        };
             }
             spec.append(c).append('|');
             if (cell != null) {
@@ -584,20 +731,18 @@ public final class LatexVisitor extends AbstractVisitor {
     // ------------------------------------------------------------------
 
     /**
-     * Rejects characters pdflatex cannot typeset, pointing at the exact column.
-     * Only the first offender per string is reported, so one line of emoji does
-     * not bury the rest of the report.
+     * Rejects characters pdflatex cannot typeset, pointing at the exact column. Only the first
+     * offender per string is reported, so one line of emoji does not bury the rest of the report.
      */
     private void checkCharacters(Node node, String literal, String where) {
         checkCharacters(node, literal, where, true);
     }
 
     /**
-     * @param translate false inside verbatim code, where a LaTeX replacement
-     *                  would be printed literally instead of being obeyed
+     * @param translate false inside verbatim code, where a LaTeX replacement would be printed
+     *     literally instead of being obeyed
      */
-    private void checkCharacters(Node node, String literal, String where,
-                                 boolean translate) {
+    private void checkCharacters(Node node, String literal, String where, boolean translate) {
         int bad = LatexSafety.firstUnsupportedChar(literal, translate);
         if (bad < 0) {
             return;
@@ -606,14 +751,20 @@ public final class LatexVisitor extends AbstractVisitor {
         // Only offsets within the first line are meaningful for the caret.
         int newline = literal.indexOf('\n');
         int offset = (newline >= 0 && bad > newline) ? 0 : bad;
-        String hint = !translate && CharacterMap.contains(c)
-                ? "this character is translated automatically in ordinary text, "
-                  + "but a code block is set verbatim so no LaTeX command can "
-                  + "be substituted; remove it or take it out of the code block"
-                : LatexSafety.hintFor(c);
-        ctx.errorAt(node, offset,
-                "the " + where + " contains " + LatexSafety.describe(c)
-                + ", which pdflatex cannot typeset",
+        String hint =
+                !translate && CharacterMap.contains(c)
+                        ? "this character is translated automatically in ordinary text, "
+                                + "but a code block is set verbatim so no LaTeX command can "
+                                + "be substituted; remove it or take it out of the code block"
+                        : LatexSafety.hintFor(c);
+        ctx.errorAt(
+                node,
+                offset,
+                "the "
+                        + where
+                        + " contains "
+                        + LatexSafety.describe(c)
+                        + ", which pdflatex cannot typeset",
                 hint);
     }
 
@@ -633,9 +784,9 @@ public final class LatexVisitor extends AbstractVisitor {
     }
 
     /**
-     * Terms matching {@code text} that have not already been recorded in this
-     * section. Claiming a term marks it used, both for the once-per-section
-     * rule and for the book-wide "never matched anything" warning.
+     * Terms matching {@code text} that have not already been recorded in this section. Claiming a
+     * term marks it used, both for the once-per-section rule and for the book-wide "never matched
+     * anything" warning.
      */
     private List<IndexTerms.Term> claimIndexTerms(String text) {
         IndexTerms terms = ctx.indexTerms();
@@ -661,11 +812,10 @@ public final class LatexVisitor extends AbstractVisitor {
     /**
      * The prose of a block, as the reader sees it, for index matching.
      *
-     * <p>Deliberately not {@link #plainText}: that one is for alt text and
-     * autolink detection and is wrong here in three ways. It contributes
-     * nothing for a line break, so {@code moral\nrealism} would collapse to
-     * {@code moralrealism} and a phrase would stop matching across a wrapped
-     * line. It includes code spans. And it includes image alt text and autolink
+     * <p>Deliberately not {@link #plainText}: that one is for alt text and autolink detection and
+     * is wrong here in three ways. It contributes nothing for a line break, so {@code
+     * moral\nrealism} would collapse to {@code moralrealism} and a phrase would stop matching
+     * across a wrapped line. It includes code spans. And it includes image alt text and autolink
      * URLs, both of which the index must never see.
      */
     private static String indexText(Node parent) {
@@ -680,8 +830,11 @@ public final class LatexVisitor extends AbstractVisitor {
                 out.append(t.getLiteral());
             } else if (c instanceof SoftLineBreak || c instanceof HardLineBreak) {
                 out.append(' ');
-            } else if (c instanceof Code || c instanceof Image || c instanceof HtmlInline
-                    || c instanceof FootnoteReference || c instanceof InlineFootnote) {
+            } else if (c instanceof Code
+                    || c instanceof Image
+                    || c instanceof HtmlInline
+                    || c instanceof FootnoteReference
+                    || c instanceof InlineFootnote) {
                 // Code, image paths and alt text, and footnote bodies are out of scope.
                 out.append(' ');
             } else if (c instanceof Link link) {
@@ -703,12 +856,16 @@ public final class LatexVisitor extends AbstractVisitor {
         sub.tightList = this.tightList;
         sub.listDepth = this.listDepth;
         sub.suppressIndex = true;
+        sub.inHeading = this.inHeading;
         Node child = parent.getFirstChild();
         while (child != null) {
             Node next = child.getNext();
             child.accept(sub);
             child = next;
         }
+        // An index marker inside, say, a link label in a heading is held back by
+        // the sub-visitor; bring it out so the heading can place it.
+        headingIndexEntries.addAll(sub.headingIndexEntries);
         return sub.result().strip();
     }
 
@@ -732,8 +889,8 @@ public final class LatexVisitor extends AbstractVisitor {
     }
 
     /**
-     * True when the image is alone in its paragraph, in which case a floating
-     * figure is appropriate. An image sitting in a sentence must stay inline.
+     * True when the image is alone in its paragraph, in which case a floating figure is
+     * appropriate. An image sitting in a sentence must stay inline.
      */
     private static boolean isBlockImage(Image image) {
         if (!(image.getParent() instanceof Paragraph paragraph)) {
@@ -759,39 +916,44 @@ public final class LatexVisitor extends AbstractVisitor {
             return false;
         }
         String d = dest.toLowerCase(Locale.ROOT);
-        return d.startsWith("http://") || d.startsWith("https://")
-                || d.startsWith("mailto:") || d.startsWith("ftp://")
+        return d.startsWith("http://")
+                || d.startsWith("https://")
+                || d.startsWith("mailto:")
+                || d.startsWith("ftp://")
                 || d.startsWith("//");
     }
 
     /**
-     * Rewrites a relative image reference so it still resolves once the .tex
-     * file is written somewhere other than beside its Markdown source.
+     * Rewrites a relative image reference so it still resolves once the .tex file is written
+     * somewhere other than beside its Markdown source.
      */
     private String resolveImagePath(Node node, String dest) {
         String decoded = percentDecode(dest);
         try {
             Path absolute = ctx.sourceDir().resolve(decoded).normalize();
             if (!Files.isRegularFile(absolute)) {
-                ctx.error(node,
+                ctx.error(
+                        node,
                         "image file not found: " + absolute,
                         "check the spelling and the path; it is resolved relative to "
-                        + ctx.sourceFile().getFileName());
+                                + ctx.sourceFile().getFileName());
             }
-            return ctx.outputDir().toAbsolutePath().normalize()
+            return ctx.outputDir()
+                    .toAbsolutePath()
+                    .normalize()
                     .relativize(absolute.toAbsolutePath().normalize())
-                    .toString().replace('\\', '/');
+                    .toString()
+                    .replace('\\', '/');
         } catch (IllegalArgumentException e) {
             // Different roots on Windows; an absolute path is the best we can do.
-            return ctx.sourceDir().resolve(decoded).normalize()
-                    .toString().replace('\\', '/');
+            return ctx.sourceDir().resolve(decoded).normalize().toString().replace('\\', '/');
         }
     }
 
     /**
-     * Decodes %XX sequences without the {@code +}-means-space rule that
-     * {@code URLDecoder} applies, which would corrupt real filenames.
-     * Consecutive escapes are gathered so multi-byte UTF-8 decodes correctly.
+     * Decodes %XX sequences without the {@code +}-means-space rule that {@code URLDecoder} applies,
+     * which would corrupt real filenames. Consecutive escapes are gathered so multi-byte UTF-8
+     * decodes correctly.
      */
     static String percentDecode(String s) {
         if (s == null) {
@@ -804,8 +966,10 @@ public final class LatexVisitor extends AbstractVisitor {
         ByteArrayOutputStream pending = new ByteArrayOutputStream();
         int i = 0;
         while (i < s.length()) {
-            if (s.charAt(i) == '%' && i + 3 <= s.length()
-                    && isHex(s.charAt(i + 1)) && isHex(s.charAt(i + 2))) {
+            if (s.charAt(i) == '%'
+                    && i + 3 <= s.length()
+                    && isHex(s.charAt(i + 1))
+                    && isHex(s.charAt(i + 2))) {
                 pending.write(Integer.parseInt(s.substring(i + 1, i + 3), 16));
                 i += 3;
             } else {

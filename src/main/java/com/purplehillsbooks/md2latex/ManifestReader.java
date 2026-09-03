@@ -1,10 +1,5 @@
 package com.purplehillsbooks.md2latex;
 
-import org.yaml.snakeyaml.LoaderOptions;
-import org.yaml.snakeyaml.Yaml;
-import org.yaml.snakeyaml.constructor.SafeConstructor;
-import org.yaml.snakeyaml.error.YAMLException;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -17,56 +12,63 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
+import org.yaml.snakeyaml.error.YAMLException;
 
 /**
  * Reads and validates a {@code *.manifest} file.
  *
- * <p>Manifests are hand written, so validation is deliberately strict and
- * chatty: unknown keys are rejected rather than ignored (which catches typos
- * that would otherwise silently do nothing), and every missing source file is
- * reported at once rather than one failure per run.
- *
- * <p>Key names are matched case-insensitively with {@code _} and {@code -}
- * ignored, so {@code fontSize}, {@code font_size} and {@code font-size} are
- * all accepted.
+ * <p>Manifests are hand written, so validation is deliberately strict and chatty: unknown keys are
+ * rejected rather than ignored (which catches typos that would otherwise silently do nothing), and
+ * every missing source file is reported at once rather than one failure per run.
  */
 public final class ManifestReader {
 
-    private static final Set<String> TOP_LEVEL_KEYS = normalizedSet(
-            "title", "subtitle", "author", "date",
-            "output", "document", "code", "preamble", "chapters");
+    private static final Set<String> TOP_LEVEL_KEYS =
+            normalizedSet(
+                    "title",
+                    "subtitle",
+                    "author",
+                    "date",
+                    "output",
+                    "document",
+                    "code",
+                    "dialect",
+                    "frontMatter",
+                    "appendices",
+                    "preamble",
+                    "chapters");
 
     /**
-     * Keys that used to be accepted, mapped to an explanation. Reporting these
-     * specifically is far more use than a generic "unknown key" complaint.
+     * Keys that used to be accepted, mapped to an explanation. Reporting these specifically is far
+     * more use than a generic "unknown key" complaint.
      */
-    private static final Map<String, String> REMOVED_KEYS = Map.of(
-            normalize("sourceDir"),
-            "'sourceDir' is no longer used. A manifest lives in the folder with its "
-            + "Markdown, and every relative path is resolved against that folder. "
-            + "Delete the line; if a chapter lives elsewhere, give it a relative "
-            + "path in 'chapters' such as ../shared/intro.md");
+    private static final Map<String, String> REMOVED_KEYS =
+            Map.of(
+                    normalize("sourceDir"),
+                    "'sourceDir' is no longer used. A manifest lives in the folder with its "
+                            + "Markdown, and every relative path is resolved against that folder. "
+                            + "Delete the line; if a chapter lives elsewhere, give it a relative "
+                            + "path in 'chapters' such as ../shared/intro.md");
 
-    private static final Set<String> OUTPUT_KEYS = normalizedSet(
-            "directory", "main", "chapters");
+    private static final Set<String> OUTPUT_KEYS = normalizedSet("directory", "main", "chapters");
 
-    private static final Set<String> DOCUMENT_KEYS = normalizedSet(
-            "class", "fontSize", "paperSize", "geometry",
-            "toc", "tocDepth", "numberDepth", "twoSide");
+    private static final Set<String> DOCUMENT_KEYS =
+            normalizedSet("class", "toc", "tocDepth", "numberDepth");
 
     private static final Set<String> ENTRY_KEYS = normalizedSet("file", "title", "part");
 
     private static final Set<String> DOCUMENT_CLASSES = Set.of("book", "report", "article");
 
-    private ManifestReader() {
-    }
+    private ManifestReader() {}
 
     /**
      * Locates a manifest given a file or a directory.
      *
-     * <p>A directory is searched for exactly one {@code *.manifest}; anything
-     * else is an error, because guessing which book to build would be worse
-     * than asking.
+     * <p>A directory is searched for exactly one {@code *.manifest}; anything else is an error,
+     * because guessing which book to build would be worse than asking.
      */
     public static Path locate(Path input) throws ManifestException {
         if (!Files.exists(input)) {
@@ -77,20 +79,25 @@ public final class ManifestReader {
         }
         List<Path> found;
         try (Stream<Path> files = Files.list(input)) {
-            found = files.filter(Files::isRegularFile)
-                    .filter(p -> p.getFileName().toString().endsWith(".manifest"))
-                    .sorted()
-                    .toList();
+            found =
+                    files.filter(Files::isRegularFile)
+                            .filter(p -> p.getFileName().toString().endsWith(".manifest"))
+                            .sorted()
+                            .toList();
         } catch (IOException e) {
-            throw new ManifestException("cannot read directory " + input + ": " + e.getMessage(), e);
+            throw new ManifestException(
+                    "cannot read directory " + input + ": " + e.getMessage(), e);
         }
         if (found.isEmpty()) {
             throw new ManifestException("no *.manifest file found in " + input);
         }
         if (found.size() > 1) {
-            StringBuilder msg = new StringBuilder(
-                    found.size() + " manifest files found in " + input
-                            + "; name the one you want:");
+            StringBuilder msg =
+                    new StringBuilder(
+                            found.size()
+                                    + " manifest files found in "
+                                    + input
+                                    + "; name the one you want:");
             for (Path p : found) {
                 msg.append("\n  ").append(p.getFileName());
             }
@@ -119,16 +126,18 @@ public final class ManifestReader {
             options.setAllowDuplicateKeys(false);
             root = new Yaml(new SafeConstructor(options)).load(text);
         } catch (YAMLException e) {
-            throw new ManifestException(file.getFileName() + ": invalid YAML - " + e.getMessage(), e);
+            throw new ManifestException(
+                    file.getFileName() + ": invalid YAML - " + e.getMessage(), e);
         }
 
         if (root == null) {
             throw new ManifestException(file.getFileName() + ": manifest is empty");
         }
         if (!(root instanceof Map<?, ?> rawMap)) {
-            throw new ManifestException(file.getFileName()
-                    + ": expected a mapping of settings at the top level, found "
-                    + typeName(root));
+            throw new ManifestException(
+                    file.getFileName()
+                            + ": expected a mapping of settings at the top level, found "
+                            + typeName(root));
         }
 
         String where = file.getFileName().toString();
@@ -144,13 +153,33 @@ public final class ManifestReader {
         Manifest.Output output = readOutput(top.optionalMap("output"), base);
         Manifest.Document document = readDocument(top.optionalMap("document"), where);
         CodeStyle codeStyle = readCodeStyle(top, where);
+        Dialect dialect = readDialect(top, where);
         List<String> preamble = top.optionalStringList("preamble");
 
-        // Chapter paths resolve against the manifest's own directory.
-        List<Manifest.Entry> entries = readEntries(top, base, where);
+        // Chapter paths resolve against the manifest's own directory. The three
+        // sections share one 'missing' list so a single run names every bad path.
+        List<String> missing = new ArrayList<>();
+        List<Manifest.Entry> frontMatter =
+                readEntries(top, "frontMatter", false, base, where, missing);
+        List<Manifest.Entry> chapters = readEntries(top, "chapters", true, base, where, missing);
+        List<Manifest.Entry> appendices =
+                readEntries(top, "appendices", false, base, where, missing);
+        reportMissing(missing, base, where);
 
-        return new Manifest(file, title, subtitle, author, date,
-                output, document, codeStyle, preamble, entries);
+        return new Manifest(
+                file,
+                title,
+                subtitle,
+                author,
+                date,
+                output,
+                document,
+                codeStyle,
+                dialect,
+                preamble,
+                frontMatter,
+                chapters,
+                appendices);
     }
 
     // ------------------------------------------------------------------
@@ -162,12 +191,11 @@ public final class ManifestReader {
 
     private static Manifest.Output readOutput(YamlMap out, Path base) throws ManifestException {
         if (out == null) {
-            return new Manifest.Output(
-                    base.resolve(DEFAULT_OUTPUT_DIR).normalize(), "book.tex");
+            return new Manifest.Output(base.resolve(DEFAULT_OUTPUT_DIR).normalize(), "book.tex");
         }
         out.rejectUnknownKeys(OUTPUT_KEYS);
-        Path directory = base.resolve(
-                out.optionalString("directory", DEFAULT_OUTPUT_DIR)).normalize();
+        Path directory =
+                base.resolve(out.optionalString("directory", DEFAULT_OUTPUT_DIR)).normalize();
         String main = out.optionalString("main", "book.tex");
         if (!main.endsWith(".tex")) {
             main = main + ".tex";
@@ -178,24 +206,24 @@ public final class ManifestReader {
     private static Manifest.Document readDocument(YamlMap doc, String where)
             throws ManifestException {
         if (doc == null) {
-            return new Manifest.Document("book", "11pt", "a4paper", "margin=1in",
-                    true, 2, 2, false);
+            return new Manifest.Document("book", true, 2, 2);
         }
         doc.rejectUnknownKeys(DOCUMENT_KEYS);
         String documentClass = doc.optionalString("class", "book").toLowerCase(Locale.ROOT);
         if (!DOCUMENT_CLASSES.contains(documentClass)) {
-            throw new ManifestException(where + ": document.class must be one of "
-                    + DOCUMENT_CLASSES + ", found '" + documentClass + "'");
+            throw new ManifestException(
+                    where
+                            + ": document.class must be one of "
+                            + DOCUMENT_CLASSES
+                            + ", found '"
+                            + documentClass
+                            + "'");
         }
         return new Manifest.Document(
                 documentClass,
-                doc.optionalString("fontSize", "11pt"),
-                doc.optionalString("paperSize", "a4paper"),
-                doc.optionalString("geometry", "margin=1in"),
                 doc.optionalBoolean("toc", true),
                 doc.optionalInt("tocDepth", 2),
-                doc.optionalInt("numberDepth", 2),
-                doc.optionalBoolean("twoSide", false));
+                doc.optionalInt("numberDepth", 2));
     }
 
     private static CodeStyle readCodeStyle(YamlMap top, String where) throws ManifestException {
@@ -207,19 +235,50 @@ public final class ManifestReader {
         }
     }
 
-    private static List<Manifest.Entry> readEntries(YamlMap top, Path sourceDir, String where)
+    /**
+     * Which extensions the Markdown may use. Markua syntax is opt-in because a line starting {@code
+     * A>}, or a {@code {i: ...}} in braces, is ordinary prose in plain Markdown and must not be
+     * silently reinterpreted.
+     */
+    private static Dialect readDialect(YamlMap top, String where) throws ManifestException {
+        String dialect = top.optionalString("dialect", null);
+        try {
+            return Dialect.parse(dialect);
+        } catch (IllegalArgumentException e) {
+            throw new ManifestException(where + ": " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Reads one of the three section lists.
+     *
+     * <p>Only {@code chapters} is required; a book need have no foreword and no appendix. Missing
+     * source files are pooled into {@code missing} rather than thrown here, so that one run reports
+     * every bad path across all three sections instead of stopping at the first.
+     *
+     * @param required true for {@code chapters}, which must exist and name at least one file
+     */
+    private static List<Manifest.Entry> readEntries(
+            YamlMap top,
+            String key,
+            boolean required,
+            Path sourceDir,
+            String where,
+            List<String> missing)
             throws ManifestException {
-        List<Object> chapterList = top.requireList("chapters");
-        if (chapterList.isEmpty()) {
-            throw new ManifestException(where + ": 'chapters' must list at least one file");
+        if (!required && !top.has(key)) {
+            return List.of();
+        }
+        List<Object> chapterList = top.requireList(key);
+        if (required && chapterList.isEmpty()) {
+            throw new ManifestException(where + ": '" + key + "' must list at least one file");
         }
 
         List<Manifest.Entry> entries = new ArrayList<>();
-        List<String> missing = new ArrayList<>();
 
         for (int i = 0; i < chapterList.size(); i++) {
             Object item = chapterList.get(i);
-            String position = "chapters[" + i + "]";
+            String position = key + "[" + i + "]";
 
             if (item instanceof String s) {
                 addChapter(entries, missing, sourceDir, s, null, where, position);
@@ -231,47 +290,74 @@ public final class ManifestReader {
                 String fileName = entry.optionalString("file", null);
 
                 if (part != null && fileName != null) {
-                    throw new ManifestException(where + ": " + position
-                            + " sets both 'part' and 'file'; a part divider takes no source file");
+                    throw new ManifestException(
+                            where
+                                    + ": "
+                                    + position
+                                    + " sets both 'part' and 'file'; a part divider takes no source file");
                 }
                 if (part != null) {
                     entries.add(Manifest.Entry.part(part));
                 } else if (fileName != null) {
-                    addChapter(entries, missing, sourceDir, fileName,
-                            entry.optionalString("title", null), where, position);
+                    addChapter(
+                            entries,
+                            missing,
+                            sourceDir,
+                            fileName,
+                            entry.optionalString("title", null),
+                            where,
+                            position);
                 } else {
-                    throw new ManifestException(where + ": " + position
-                            + " needs either a 'file' or a 'part' key");
+                    throw new ManifestException(
+                            where + ": " + position + " needs either a 'file' or a 'part' key");
                 }
             } else {
-                throw new ManifestException(where + ": " + position
-                        + " must be a filename or a mapping, found " + typeName(item));
+                throw new ManifestException(
+                        where
+                                + ": "
+                                + position
+                                + " must be a filename or a mapping, found "
+                                + typeName(item));
             }
         }
 
-        if (!missing.isEmpty()) {
-            StringBuilder msg = new StringBuilder(where + ": "
-                    + missing.size() + " source file(s) listed in the manifest do not exist:");
-            for (String m : missing) {
-                msg.append("\n  ").append(m);
-            }
-            msg.append("\n(paths are resolved against sourceDir: ").append(sourceDir).append(')');
-            throw new ManifestException(msg.toString());
-        }
-        if (entries.stream().allMatch(Manifest.Entry::isPart)) {
-            throw new ManifestException(where + ": 'chapters' contains only part dividers "
-                    + "and no source files");
+        if (required && missing.isEmpty() && entries.stream().allMatch(Manifest.Entry::isPart)) {
+            // Only worth saying when every listed file was actually found; if some
+            // are missing, that is the more useful complaint and it comes first.
+            throw new ManifestException(
+                    where + ": '" + key + "' contains only part dividers and no source files");
         }
         return entries;
     }
 
-    private static void addChapter(List<Manifest.Entry> entries,
-                                   List<String> missing,
-                                   Path sourceDir,
-                                   String fileName,
-                                   String titleOverride,
-                                   String where,
-                                   String position) throws ManifestException {
+    /** Reports every source file that could not be found, across all three sections at once. */
+    private static void reportMissing(List<String> missing, Path sourceDir, String where)
+            throws ManifestException {
+        if (missing.isEmpty()) {
+            return;
+        }
+        StringBuilder msg =
+                new StringBuilder(
+                        where
+                                + ": "
+                                + missing.size()
+                                + " source file(s) listed in the manifest do not exist:");
+        for (String m : missing) {
+            msg.append("\n  ").append(m);
+        }
+        msg.append("\n(paths are resolved against sourceDir: ").append(sourceDir).append(')');
+        throw new ManifestException(msg.toString());
+    }
+
+    private static void addChapter(
+            List<Manifest.Entry> entries,
+            List<String> missing,
+            Path sourceDir,
+            String fileName,
+            String titleOverride,
+            String where,
+            String position)
+            throws ManifestException {
         if (fileName.isBlank()) {
             throw new ManifestException(where + ": " + position + " has an empty filename");
         }
@@ -288,9 +374,8 @@ public final class ManifestReader {
     // ------------------------------------------------------------------
 
     /**
-     * A YAML mapping with typed accessors. Keys are normalized so that case and
-     * {@code _}/{@code -} separators do not matter, while the original spelling
-     * is retained for error messages.
+     * A YAML mapping with typed accessors. Keys are normalized so that case and {@code _}/{@code -}
+     * separators do not matter, while the original spelling is retained for error messages.
      */
     private static final class YamlMap {
 
@@ -309,8 +394,12 @@ public final class ManifestReader {
                 String original = String.valueOf(e.getKey());
                 String key = normalize(original);
                 if (values.containsKey(key)) {
-                    throw new ManifestException(where + ": duplicate key '" + original
-                            + "' in " + (context.isEmpty() ? "the top level" : context));
+                    throw new ManifestException(
+                            where
+                                    + ": duplicate key '"
+                                    + original
+                                    + "' in "
+                                    + (context.isEmpty() ? "the top level" : context));
                 }
                 values.put(key, e.getValue());
                 originalNames.put(key, original);
@@ -335,17 +424,21 @@ public final class ManifestReader {
                 }
             }
             if (!unknown.isEmpty()) {
-                throw new ManifestException(where + ": unknown key(s) "
-                        + unknown + (prefix.isEmpty() ? " at the top level" : " in " + trimDot())
-                        + ". Recognised keys here: " + allowed);
+                throw new ManifestException(
+                        where
+                                + ": unknown key(s) "
+                                + unknown
+                                + (prefix.isEmpty() ? " at the top level" : " in " + trimDot())
+                                + ". Recognised keys here: "
+                                + allowed);
             }
         }
 
         String requireString(String key) throws ManifestException {
             Object v = values.get(normalize(key));
             if (v == null) {
-                throw new ManifestException(where + ": required key '" + prefix + key
-                        + "' is missing");
+                throw new ManifestException(
+                        where + ": required key '" + prefix + key + "' is missing");
             }
             String s = String.valueOf(v).trim();
             if (s.isEmpty()) {
@@ -375,8 +468,15 @@ public final class ManifestReader {
             return switch (s) {
                 case "true", "yes", "on", "1" -> true;
                 case "false", "no", "off", "0" -> false;
-                default -> throw new ManifestException(where + ": '" + prefix + key
-                        + "' must be true or false, found '" + s + "'");
+                default ->
+                        throw new ManifestException(
+                                where
+                                        + ": '"
+                                        + prefix
+                                        + key
+                                        + "' must be true or false, found '"
+                                        + s
+                                        + "'");
             };
         }
 
@@ -391,8 +491,15 @@ public final class ManifestReader {
             try {
                 return Integer.parseInt(String.valueOf(v).trim());
             } catch (NumberFormatException e) {
-                throw new ManifestException(where + ": '" + prefix + key
-                        + "' must be a whole number, found '" + v + "'", e);
+                throw new ManifestException(
+                        where
+                                + ": '"
+                                + prefix
+                                + key
+                                + "' must be a whole number, found '"
+                                + v
+                                + "'",
+                        e);
             }
         }
 
@@ -402,21 +509,26 @@ public final class ManifestReader {
                 return null;
             }
             if (!(v instanceof Map<?, ?> m)) {
-                throw new ManifestException(where + ": '" + prefix + key
-                        + "' must be a mapping, found " + typeName(v));
+                throw new ManifestException(
+                        where + ": '" + prefix + key + "' must be a mapping, found " + typeName(v));
             }
             return new YamlMap(m, where, prefix + key);
+        }
+
+        /** True when the key is present at all, whatever its value. */
+        boolean has(String key) {
+            return values.containsKey(normalize(key));
         }
 
         List<Object> requireList(String key) throws ManifestException {
             Object v = values.get(normalize(key));
             if (v == null) {
-                throw new ManifestException(where + ": required key '" + prefix + key
-                        + "' is missing");
+                throw new ManifestException(
+                        where + ": required key '" + prefix + key + "' is missing");
             }
             if (!(v instanceof List<?> list)) {
-                throw new ManifestException(where + ": '" + prefix + key
-                        + "' must be a list, found " + typeName(v));
+                throw new ManifestException(
+                        where + ": '" + prefix + key + "' must be a list, found " + typeName(v));
             }
             return new ArrayList<>(list);
         }
@@ -430,8 +542,13 @@ public final class ManifestReader {
                 return List.of(s);
             }
             if (!(v instanceof List<?> list)) {
-                throw new ManifestException(where + ": '" + prefix + key
-                        + "' must be a list of strings, found " + typeName(v));
+                throw new ManifestException(
+                        where
+                                + ": '"
+                                + prefix
+                                + key
+                                + "' must be a list of strings, found "
+                                + typeName(v));
             }
             List<String> result = new ArrayList<>(list.size());
             for (Object item : list) {

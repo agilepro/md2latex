@@ -1,34 +1,32 @@
 package com.purplehillsbooks.md2latex;
 
-import org.commonmark.ext.footnotes.FootnoteDefinition;
-import org.commonmark.node.Node;
-import org.commonmark.node.SourceSpan;
-
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.commonmark.ext.footnotes.FootnoteDefinition;
+import org.commonmark.node.Node;
+import org.commonmark.node.SourceSpan;
 
 /**
- * Everything a {@link LatexVisitor} needs that is not the node tree itself:
- * sectioning depth, code rendering style, the directories used to rewrite
- * relative image paths, the footnote table, and the collector that turns
- * trouble into located {@link Problem}s.
+ * Everything a {@link LatexVisitor} needs that is not the node tree itself: sectioning depth, code
+ * rendering style, the directories used to rewrite relative image paths, the footnote table, and
+ * the collector that turns trouble into located {@link Problem}s.
  *
- * <p>One context is built per source file, because image paths resolve
- * relative to the file that referenced them. The problem list is supplied by
- * the caller so it can be shared across every file in a run.
+ * <p>One context is built per source file, because image paths resolve relative to the file that
+ * referenced them. The problem list is supplied by the caller so it can be shared across every file
+ * in a run.
  */
 public final class RenderContext {
 
     /** H1..H6 mapped onto LaTeX sectioning commands for {@code book}. */
     private static final String[] BOOK_HEADINGS = {
-            "chapter", "section", "subsection", "subsubsection", "paragraph", "subparagraph"
+        "chapter", "section", "subsection", "subsubsection", "paragraph", "subparagraph"
     };
 
     /** H1..H6 mapped onto LaTeX sectioning commands for {@code article}. */
     private static final String[] ARTICLE_HEADINGS = {
-            "section", "subsection", "subsubsection", "paragraph", "subparagraph", "subparagraph"
+        "section", "subsection", "subsubsection", "paragraph", "subparagraph", "subparagraph"
     };
 
     private final String[] headings;
@@ -42,17 +40,19 @@ public final class RenderContext {
 
     /** Replaces the text of the first level-1 heading, when the manifest asks. */
     private String titleOverride;
+
     private boolean titleOverrideUsed;
 
     private final IndexTerms indexTerms;
 
-    public RenderContext(boolean bookClass,
-                         CodeStyle codeStyle,
-                         Path sourceFile,
-                         Path outputDir,
-                         MarkdownLoader.Result source,
-                         List<Problem> problems,
-                         IndexTerms indexTerms) {
+    public RenderContext(
+            boolean bookClass,
+            CodeStyle codeStyle,
+            Path sourceFile,
+            Path outputDir,
+            MarkdownLoader.Result source,
+            List<Problem> problems,
+            IndexTerms indexTerms) {
         this.headings = bookClass ? BOOK_HEADINGS : ARTICLE_HEADINGS;
         this.codeStyle = codeStyle;
         this.sourceFile = sourceFile;
@@ -106,8 +106,8 @@ public final class RenderContext {
     }
 
     /**
-     * As {@link #error(Node, String, String)}, but for a fault at a known
-     * offset in characters from the start of the node's first line.
+     * As {@link #error(Node, String, String)}, but for a fault at a known offset in characters from
+     * the start of the node's first line.
      */
     public void errorAt(Node node, int columnOffset, String message, String hint) {
         problems.add(problem(Problem.Severity.ERROR, node, columnOffset, message, hint));
@@ -118,8 +118,8 @@ public final class RenderContext {
         problems.add(problem(Problem.Severity.WARNING, node, 0, message, hint));
     }
 
-    private Problem problem(Problem.Severity severity, Node node,
-                            int columnOffset, String message, String hint) {
+    private Problem problem(
+            Problem.Severity severity, Node node, int columnOffset, String message, String hint) {
         int line = 0;
         int column = 0;
         String text = null;
@@ -134,9 +134,8 @@ public final class RenderContext {
     }
 
     /**
-     * The first source span of a node, or of its nearest ancestor that has one.
-     * Inline nodes occasionally lack spans, in which case the enclosing block
-     * still gives a usable line.
+     * The first source span of a node, or of its nearest ancestor that has one. Inline nodes
+     * occasionally lack spans, in which case the enclosing block still gives a usable line.
      */
     private static SourceSpan firstSpan(Node node) {
         for (Node n = node; n != null; n = n.getParent()) {
@@ -157,9 +156,8 @@ public final class RenderContext {
     }
 
     /**
-     * Returns the manifest-supplied chapter title the first time a level-1
-     * heading is rendered, and null every time after that, so only the opening
-     * heading of a document is replaced.
+     * Returns the manifest-supplied chapter title the first time a level-1 heading is rendered, and
+     * null every time after that, so only the opening heading of a document is replaced.
      */
     public String takeTitleOverride() {
         if (titleOverride == null || titleOverrideUsed) {
@@ -170,8 +168,8 @@ public final class RenderContext {
     }
 
     /**
-     * The pending override without consuming it, so index matching can see the
-     * text a heading is about to be given.
+     * The pending override without consuming it, so index matching can see the text a heading is
+     * about to be given.
      */
     public String peekTitleOverride() {
         return titleOverrideUsed ? null : titleOverride;

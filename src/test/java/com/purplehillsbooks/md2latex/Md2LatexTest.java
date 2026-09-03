@@ -1,15 +1,14 @@
 package com.purplehillsbooks.md2latex;
 
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
 
 class Md2LatexTest {
 
@@ -22,12 +21,14 @@ class Md2LatexTest {
 
     private String convert(String markdown) {
         return new Md2Latex(CodeStyle.LISTINGS, false, problems)
-                .convert(markdown, sourceFile, here).latex();
+                .convert(markdown, sourceFile, here)
+                .latex();
     }
 
     private String convertAsBook(String markdown) {
         return new Md2Latex(CodeStyle.LISTINGS, true, problems)
-                .convert(markdown, sourceFile, here).latex();
+                .convert(markdown, sourceFile, here)
+                .latex();
     }
 
     @Test
@@ -135,7 +136,9 @@ class Md2LatexTest {
 
     @Test
     void tableProducesTabularWithAlignment() {
-        String tex = convert("""
+        String tex =
+                convert(
+                        """
                 | Left | Center | Right |
                 |:-----|:------:|------:|
                 | a    | b      | c     |

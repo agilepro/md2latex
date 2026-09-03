@@ -1,9 +1,8 @@
 package com.purplehillsbooks.md2latex;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -11,22 +10,20 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Exercises the command line end to end.
  *
- * <p>These tests are only possible because {@code main} delegates to a
- * {@code run(String[])} that returns the exit code instead of calling
- * {@link System#exit}, which would tear down the test JVM.
+ * <p>These tests are only possible because {@code main} delegates to a {@code run(String[])} that
+ * returns the exit code instead of calling {@link System#exit}, which would tear down the test JVM.
  */
 class MainTest {
 
-    @TempDir
-    Path tmp;
+    @TempDir Path tmp;
 
     private final ByteArrayOutputStream out = new ByteArrayOutputStream();
     private final ByteArrayOutputStream err = new ByteArrayOutputStream();
@@ -70,7 +67,9 @@ class MainTest {
     }
 
     private Path standardManifest() throws IOException {
-        return writeTempFile("docs/book.manifest", """
+        return writeTempFile(
+                "docs/book.manifest",
+                """
                 title:     Test Book
                 subtitle:  Being a Test
                 author:    A. Tester
@@ -86,44 +85,44 @@ class MainTest {
 
     @Test
     void noArgumentsPrintsUsageAndSucceeds() {
-        assertEquals(0, Main.run(new String[]{}));
+        assertEquals(0, Main.run(new String[] {}));
         assertTrue(stdout().contains("USAGE"));
     }
 
     @Test
     void helpFlagSucceeds() {
-        assertEquals(0, Main.run(new String[]{"--help"}));
+        assertEquals(0, Main.run(new String[] {"--help"}));
         assertTrue(stdout().contains("THE MANIFEST"));
     }
 
     @Test
     void unknownOptionIsAUsageError() {
-        assertEquals(2, Main.run(new String[]{"--nope"}));
+        assertEquals(2, Main.run(new String[] {"--nope"}));
         assertTrue(stderr().contains("Unknown option"));
     }
 
     @Test
     void missingManifestArgumentIsAUsageError() {
-        assertEquals(2, Main.run(new String[]{"-v"}));
+        assertEquals(2, Main.run(new String[] {"-v"}));
         assertTrue(stderr().contains("No manifest given"));
     }
 
     @Test
     void outputFlagWithoutInitIsAUsageError() {
-        assertEquals(2, Main.run(new String[]{"book.manifest", "-o", "x"}));
+        assertEquals(2, Main.run(new String[] {"book.manifest", "-o", "x"}));
         assertTrue(stderr().contains("only applies to --init"));
     }
 
     @Test
     void nonExistentManifestIsAnError() {
-        assertEquals(1, Main.run(new String[]{tmp.resolve("absent.manifest").toString()}));
+        assertEquals(1, Main.run(new String[] {tmp.resolve("absent.manifest").toString()}));
         assertTrue(stdout().contains("not found"));
     }
 
     @Test
     void invalidManifestIsAnError() throws IOException {
         Path testManifest = writeTempFile("docs/bad.manifest", "chapters: [intro.md]\n");
-        assertEquals(1, Main.run(new String[]{testManifest.toString()}));
+        assertEquals(1, Main.run(new String[] {testManifest.toString()}));
         assertTrue(stdout().contains("'title' is missing"));
     }
 
@@ -134,7 +133,7 @@ class MainTest {
     @Test
     void buildsAMasterFileAndOneFilePerChapter() throws IOException {
         Path m = standardManifest();
-        assertEquals(0, Main.run(new String[]{m.toString()}));
+        assertEquals(0, Main.run(new String[] {m.toString()}));
 
         assertTrue(Files.exists(tmp.resolve("docs/latex/book.tex")));
         assertTrue(Files.exists(tmp.resolve("docs/latex/chapters/01-intro.tex")));
@@ -144,7 +143,7 @@ class MainTest {
 
     @Test
     void masterFileInputsEachChapterInOrder() throws IOException {
-        Main.run(new String[]{standardManifest().toString()});
+        Main.run(new String[] {standardManifest().toString()});
         String master = readTempFile("docs/latex/book.tex");
 
         assertTrue(master.contains("\\title{Test Book \\\\[0.4em] \\large Being a Test}"));
@@ -159,7 +158,7 @@ class MainTest {
 
     @Test
     void chapterFilesAreFragmentsWithNoPreamble() throws IOException {
-        Main.run(new String[]{standardManifest().toString()});
+        Main.run(new String[] {standardManifest().toString()});
         String chapter = readTempFile("docs/latex/chapters/01-intro.tex");
 
         assertTrue(chapter.contains("\\chapter{Introduction}"));
@@ -169,28 +168,35 @@ class MainTest {
 
     @Test
     void manifestOrderOverridesFilenameAndFrontMatter() throws IOException {
-        Path m = writeTempFile("docs/book.manifest", """
+        Path m =
+                writeTempFile(
+                        "docs/book.manifest",
+                        """
                 title: Reversed
                 chapters:
                   - second.md
                   - intro.md
                 """);
-        Main.run(new String[]{m.toString()});
+        Main.run(new String[] {m.toString()});
         String master = readTempFile("docs/latex/book.tex");
 
-        assertTrue(master.indexOf("\\input{chapters/01-second}")
-                < master.indexOf("\\input{chapters/02-intro}"));
+        assertTrue(
+                master.indexOf("\\input{chapters/01-second}")
+                        < master.indexOf("\\input{chapters/02-intro}"));
     }
 
     @Test
     void titleOverrideReplacesTheHeading() throws IOException {
-        Path m = writeTempFile("docs/book.manifest", """
+        Path m =
+                writeTempFile(
+                        "docs/book.manifest",
+                        """
                 title: X
                 chapters:
                   - file:  intro.md
                     title: A Better Name
                 """);
-        Main.run(new String[]{m.toString()});
+        Main.run(new String[] {m.toString()});
         String chapter = readTempFile("docs/latex/chapters/01-intro.tex");
 
         assertTrue(chapter.contains("\\chapter{A Better Name}"));
@@ -200,21 +206,29 @@ class MainTest {
     @Test
     void titleOverrideIsInsertedWhenTheSourceHasNoHeading() throws IOException {
         writeTempFile("docs/headless.md", "Just a paragraph, no heading.\n");
-        Path m = writeTempFile("docs/book.manifest", """
+        Path m =
+                writeTempFile(
+                        "docs/book.manifest",
+                        """
                 title: X
                 chapters:
                   - file:  headless.md
                     title: Supplied Title
                 """);
-        assertEquals(0, Main.run(new String[]{m.toString()}));
+        assertEquals(0, Main.run(new String[] {m.toString()}));
 
-        assertTrue(readTempFile("docs/latex/chapters/01-headless.tex").contains("\\chapter{Supplied Title}"));
+        assertTrue(
+                readTempFile("docs/latex/chapters/01-headless.tex")
+                        .contains("\\chapter{Supplied Title}"));
         assertTrue(stderr().contains("no top-level heading"));
     }
 
     @Test
     void partDividersAppearInTheMasterFile() throws IOException {
-        Path m = writeTempFile("docs/book.manifest", """
+        Path m =
+                writeTempFile(
+                        "docs/book.manifest",
+                        """
                 title: X
                 chapters:
                   - part: The First Part
@@ -222,20 +236,24 @@ class MainTest {
                   - part: The Second Part
                   - second.md
                 """);
-        Main.run(new String[]{m.toString()});
+        Main.run(new String[] {m.toString()});
         String master = readTempFile("docs/latex/book.tex");
 
         assertTrue(master.contains("\\part{The First Part}"));
         assertTrue(master.contains("\\part{The Second Part}"));
         // Parts consume no source, so chapter numbering stays 1..2.
-        assertTrue(master.indexOf("\\part{The First Part}")
-                < master.indexOf("\\input{chapters/01-intro}"));
+        assertTrue(
+                master.indexOf("\\part{The First Part}")
+                        < master.indexOf("\\input{chapters/01-intro}"));
         assertTrue(Files.exists(tmp.resolve("docs/latex/chapters/02-second.tex")));
     }
 
     @Test
     void outputLocationsComeFromTheManifest() throws IOException {
-        Path m = writeTempFile("docs/book.manifest", """
+        Path m =
+                writeTempFile(
+                        "docs/book.manifest",
+                        """
                 title: X
                 output:
                   directory: dist/tex
@@ -243,7 +261,7 @@ class MainTest {
                 chapters:
                   - intro.md
                 """);
-        Main.run(new String[]{m.toString()});
+        Main.run(new String[] {m.toString()});
 
         assertTrue(Files.exists(tmp.resolve("docs/dist/tex/thesis.tex")));
         assertTrue(Files.exists(tmp.resolve("docs/dist/tex/chapters/01-intro.tex")));
@@ -255,50 +273,57 @@ class MainTest {
         Files.createDirectories(tmp.resolve("docs"));
         Files.writeString(tmp.resolve("docs/pic.png"), "not really a png");
         writeTempFile("docs/withimage.md", "# Pictures\n\n![cap](pic.png)\n");
-        Path m = writeTempFile("docs/book.manifest", """
+        Path m =
+                writeTempFile(
+                        "docs/book.manifest",
+                        """
                 title: X
                 chapters:
                   - withimage.md
                 """);
-        Main.run(new String[]{m.toString()});
+        Main.run(new String[] {m.toString()});
 
         String chapter = readTempFile("docs/latex/chapters/01-withimage.tex");
         // From docs/latex/ (where pdflatex runs) the image is ../pic.png,
         // NOT ../../pic.png as it would be relative to docs/latex/chapters/.
-        assertTrue(chapter.contains("{../pic}.png"),
+        assertTrue(
+                chapter.contains("{../pic}.png"),
                 "image path should be relative to the master document:\n" + chapter);
     }
 
     @Test
     void directoryArgumentFindsTheManifest() throws IOException {
         standardManifest();
-        assertEquals(0, Main.run(new String[]{tmp.resolve("docs").toString()}));
+        assertEquals(0, Main.run(new String[] {tmp.resolve("docs").toString()}));
         assertTrue(Files.exists(tmp.resolve("docs/latex/book.tex")));
     }
 
     @Test
     void thePreambleDoesNotDependOnUlem() throws IOException {
-        Main.run(new String[]{standardManifest().toString()});
+        Main.run(new String[] {standardManifest().toString()});
         String bookContents = readTempFile("docs/latex/book.tex");
         assertFalse(bookContents.contains("ulem"), "ulem should no longer be required");
     }
 
     @Test
     void extraPreambleLinesAreEmitted() throws IOException {
-        Path m = writeTempFile("docs/book.manifest", """
+        Path m =
+                writeTempFile(
+                        "docs/book.manifest",
+                        """
                 title: X
                 preamble:
                   - \\usepackage{microtype}
                 chapters:
                   - intro.md
                 """);
-        Main.run(new String[]{m.toString()});
+        Main.run(new String[] {m.toString()});
         assertTrue(readTempFile("docs/latex/book.tex").contains("\\usepackage{microtype}"));
     }
 
     @Test
     void verboseListsChapterFiles() throws IOException {
-        Main.run(new String[]{standardManifest().toString(), "-v"});
+        Main.run(new String[] {standardManifest().toString(), "-v"});
         assertTrue(stdout().contains("chapters/01-intro.tex"));
     }
 
@@ -310,9 +335,12 @@ class MainTest {
     void initWritesTheManifestIntoTheSourceFolderByDefault() throws IOException {
         writeTempFile("docs/zzz.md", "---\nsidebar_position: 0\n---\n# First By Position\n");
 
-        assertEquals(0, Main.run(new String[]{
-                "--init", tmp.resolve("docs").toString(),
-                "--title", "Scaffolded"}));
+        assertEquals(
+                0,
+                Main.run(
+                        new String[] {
+                            "--init", tmp.resolve("docs").toString(), "--title", "Scaffolded"
+                        }));
 
         Path target = tmp.resolve("docs/book.manifest");
         assertTrue(Files.exists(target), "manifest should land beside the Markdown");
@@ -330,32 +358,38 @@ class MainTest {
     @Test
     void initHonoursAnExplicitOutputPathAndStillResolvesChapters() throws IOException {
         Path target = tmp.resolve("elsewhere/generated.manifest");
-        assertEquals(0, Main.run(new String[]{
-                "--init", tmp.resolve("docs").toString(), "-o", target.toString()}));
+        assertEquals(
+                0,
+                Main.run(
+                        new String[] {
+                            "--init", tmp.resolve("docs").toString(), "-o", target.toString()
+                        }));
 
         String yaml = Files.readString(target, StandardCharsets.UTF_8);
         // The manifest sits one level away, so chapter paths reach back out.
         assertTrue(yaml.contains("../docs/intro.md"), yaml);
 
-        assertEquals(0, Main.run(new String[]{target.toString()}));
+        assertEquals(0, Main.run(new String[] {target.toString()}));
         assertTrue(Files.exists(tmp.resolve("elsewhere/latex/book.tex")));
     }
 
     @Test
     void aScaffoldedManifestBuildsWithoutEditing() throws IOException {
-        assertEquals(0, Main.run(new String[]{
-                "--init", tmp.resolve("docs").toString()}));
-        assertEquals(0, Main.run(new String[]{
-                tmp.resolve("docs/book.manifest").toString()}));
+        assertEquals(0, Main.run(new String[] {"--init", tmp.resolve("docs").toString()}));
+        assertEquals(0, Main.run(new String[] {tmp.resolve("docs/book.manifest").toString()}));
         assertTrue(Files.exists(tmp.resolve("docs/latex/book.tex")));
     }
 
     @Test
     void initOnADirectoryWithNoMarkdownIsAnError() throws IOException {
         Files.createDirectories(tmp.resolve("empty"));
-        assertEquals(1, Main.run(new String[]{
-                "--init", tmp.resolve("empty").toString(),
-                "-o", tmp.resolve("x.manifest").toString()}));
+        assertEquals(
+                1,
+                Main.run(
+                        new String[] {
+                            "--init", tmp.resolve("empty").toString(),
+                            "-o", tmp.resolve("x.manifest").toString()
+                        }));
         assertTrue(stdout().contains("no .md files"));
     }
 }

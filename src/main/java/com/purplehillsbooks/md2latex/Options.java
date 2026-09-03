@@ -6,11 +6,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Command line options, parsed by hand to keep the shaded jar free of a
- * third-party CLI dependency.
+ * Command line options, parsed by hand to keep the shaded jar free of a third-party CLI dependency.
  *
- * <p>Everything that shapes the output now lives in the manifest, so the
- * command line only says which manifest to build.
+ * <p>Everything that shapes the output now lives in the manifest, so the command line only says
+ * which manifest to build.
  */
 public final class Options {
 
@@ -29,7 +28,8 @@ public final class Options {
     public boolean verbose;
     public boolean help;
 
-    public static final String USAGE = """
+    public static final String USAGE =
+            """
             md2latex - build a LaTeX book from Markdown, driven by a manifest
 
             USAGE
@@ -72,13 +72,9 @@ public final class Options {
                   chapters    subdirectory for chapters. Default: chapters
                 document:
                   class       book | report | article.   Default: book
-                  fontSize    Default: 11pt
-                  paperSize   Default: a4paper
-                  geometry    Default: margin=1in
                   toc         Default: true
                   tocDepth    Default: 2
                   numberDepth Default: 2
-                  twoSide     Default: false
                 code        listings | minted | verbatim. Default: listings
                 preamble    list of raw lines appended to the preamble.
                 chapters    required. Ordered list. Each item is either a
@@ -87,10 +83,6 @@ public final class Options {
                               title   overrides the file's H1
                             or a mapping with:
                               part    inserts a \\part divider, reads no file
-
-              Key names ignore case, underscores and hyphens, so fontSize,
-              font_size and font-size are all accepted. Unknown keys are
-              reported as errors rather than silently ignored.
 
             MARKDOWN FRONT MATTER
               Chapter files may carry a YAML header. Recognised keys:
@@ -165,7 +157,8 @@ public final class Options {
             if (!positional.isEmpty()) {
                 throw new IllegalArgumentException(
                         "--init takes the source directory as its value; unexpected extra "
-                        + "argument: " + positional.get(0));
+                                + "argument: "
+                                + positional.get(0));
             }
             // A manifest belongs beside the Markdown it describes.
             o.initTo = output != null ? output : o.initFrom.resolve("book.manifest");
@@ -175,12 +168,12 @@ public final class Options {
         if (output != null) {
             throw new IllegalArgumentException(
                     "--output only applies to --init; all build output paths come from "
-                    + "the manifest.");
+                            + "the manifest.");
         }
         if (positional.isEmpty()) {
             throw new IllegalArgumentException(
                     "No manifest given. Pass a *.manifest file, or a directory "
-                    + "containing one.");
+                            + "containing one.");
         }
         if (positional.size() > 1) {
             throw new IllegalArgumentException(

@@ -1,8 +1,8 @@
 package com.purplehillsbooks.md2latex;
 
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -10,24 +10,21 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Every fault that would produce LaTeX which does not compile must be reported
- * against the Markdown line that caused it, with enough detail to fix it.
+ * Every fault that would produce LaTeX which does not compile must be reported against the Markdown
+ * line that caused it, with enough detail to fix it.
  *
- * <p>Note that arrows, Greek letters and comparison operators are no longer
- * examples of rejected characters: they have exact LaTeX equivalents and are
- * translated by {@link CharacterMap}. Emoji and CJK have none, so they are used
- * here whenever an unrepresentable character is needed.
+ * <p>Note that arrows, Greek letters and comparison operators are no longer examples of rejected
+ * characters: they have exact LaTeX equivalents and are translated by {@link CharacterMap}. Emoji
+ * and CJK have none, so they are used here whenever an unrepresentable character is needed.
  */
 class ConversionErrorTest {
 
-    @TempDir
-    Path tmp;
+    @TempDir Path tmp;
 
     private Path sourceFile;
 
@@ -52,11 +49,13 @@ class ConversionErrorTest {
     }
 
     private Problem onlyError(String markdown, CodeStyle style) throws IOException {
-        List<Problem> errors = problemsFor(markdown, style).stream()
-                .filter(Problem::isError).toList();
-        assertEquals(1, errors.size(),
-                "expected exactly one error but got: " + errors.stream()
-                        .map(Problem::format).toList());
+        List<Problem> errors =
+                problemsFor(markdown, style).stream().filter(Problem::isError).toList();
+        assertEquals(
+                1,
+                errors.size(),
+                "expected exactly one error but got: "
+                        + errors.stream().map(Problem::format).toList());
         return errors.get(0);
     }
 
@@ -66,7 +65,9 @@ class ConversionErrorTest {
 
     @Test
     void ordinaryProseProducesNoProblems() throws IOException {
-        assertTrue(problemsFor("""
+        assertTrue(
+                problemsFor(
+                                """
                 # A Heading
 
                 Ordinary prose with *emphasis*, a list:
@@ -75,7 +76,8 @@ class ConversionErrorTest {
                 - two
 
                 and a [link](https://example.test).
-                """).isEmpty());
+                """)
+                        .isEmpty());
     }
 
     @Test
@@ -185,7 +187,9 @@ class ConversionErrorTest {
 
     @Test
     void listNestedTooDeeplyIsAnError() throws IOException {
-        Problem p = onlyError("""
+        Problem p =
+                onlyError(
+                        """
                 - one
                     - two
                         - three
@@ -198,12 +202,15 @@ class ConversionErrorTest {
 
     @Test
     void fourLevelsOfNestingIsFine() throws IOException {
-        assertTrue(problemsFor("""
+        assertTrue(
+                problemsFor(
+                                """
                 - one
                     - two
                         - three
                             - four
-                """).isEmpty());
+                """)
+                        .isEmpty());
     }
 
     @Test
@@ -228,8 +235,8 @@ class ConversionErrorTest {
 
     @Test
     void theSameCodeBlockIsFineUnderListings() throws IOException {
-        assertTrue(problemsFor("```\nsome \\end{verbatim} text\n```\n", CodeStyle.LISTINGS)
-                .isEmpty());
+        assertTrue(
+                problemsFor("```\nsome \\end{verbatim} text\n```\n", CodeStyle.LISTINGS).isEmpty());
     }
 
     // ------------------------------------------------------------------
@@ -238,7 +245,9 @@ class ConversionErrorTest {
 
     @Test
     void lineNumbersAccountForStrippedFrontMatter() throws IOException {
-        Problem p = onlyError("""
+        Problem p =
+                onlyError(
+                        """
                 ---
                 sidebar_position: 3
                 title: Something
@@ -252,7 +261,9 @@ class ConversionErrorTest {
 
     @Test
     void lineNumbersAccountForRewrittenAdmonitions() throws IOException {
-        Problem p = onlyError("""
+        Problem p =
+                onlyError(
+                        """
                 # Heading
 
                 :::tip[Note]
@@ -278,7 +289,9 @@ class ConversionErrorTest {
     @Test
     void everyProblemInAFileIsReportedNotJustTheFirst() throws IOException {
         Files.writeString(tmp.resolve("diagram.svg"), "<svg/>");
-        List<Problem> errors = problemsFor("""
+        List<Problem> errors =
+                problemsFor(
+                                """
                 # Heading
 
                 First bad 😀 char.
@@ -286,21 +299,36 @@ class ConversionErrorTest {
                 ![missing](gone.png)
 
                 ![vector](diagram.svg)
-                """).stream().filter(Problem::isError).toList();
+                """)
+                        .stream()
+                        .filter(Problem::isError)
+                        .toList();
 
-        assertEquals(3, errors.size(),
-                errors.stream().map(Problem::format).toList().toString());
+        assertEquals(3, errors.size(), errors.stream().map(Problem::format).toList().toString());
         // Each is pinned to its own line, so all three can be fixed in one pass.
         assertEquals(List.of(3, 5, 7), errors.stream().map(Problem::line).toList());
     }
 
     @Test
     void theExceptionMessageListsEveryProblemAndSaysNothingWasWritten() {
-        List<Problem> problems = List.of(
-                new Problem(Problem.Severity.ERROR, Path.of("a.md"), 3, 5,
-                        "bad line", "first thing wrong", "fix it this way"),
-                new Problem(Problem.Severity.ERROR, Path.of("b.md"), 9, 0,
-                        null, "second thing wrong", null));
+        List<Problem> problems =
+                List.of(
+                        new Problem(
+                                Problem.Severity.ERROR,
+                                Path.of("a.md"),
+                                3,
+                                5,
+                                "bad line",
+                                "first thing wrong",
+                                "fix it this way"),
+                        new Problem(
+                                Problem.Severity.ERROR,
+                                Path.of("b.md"),
+                                9,
+                                0,
+                                null,
+                                "second thing wrong",
+                                null));
 
         String msg = new ConversionException(problems).getMessage();
         assertTrue(msg.contains("2 problems"), msg);
@@ -314,9 +342,24 @@ class ConversionErrorTest {
 
     @Test
     void warningsAreListedSeparatelyFromErrors() {
-        List<Problem> problems = List.of(
-                new Problem(Problem.Severity.ERROR, Path.of("a.md"), 1, 0, null, "broken", null),
-                new Problem(Problem.Severity.WARNING, Path.of("b.md"), 2, 0, null, "minor", null));
+        List<Problem> problems =
+                List.of(
+                        new Problem(
+                                Problem.Severity.ERROR,
+                                Path.of("a.md"),
+                                1,
+                                0,
+                                null,
+                                "broken",
+                                null),
+                        new Problem(
+                                Problem.Severity.WARNING,
+                                Path.of("b.md"),
+                                2,
+                                0,
+                                null,
+                                "minor",
+                                null));
 
         String msg = new ConversionException(problems).getMessage();
         assertTrue(msg.contains("1 problem"), msg);

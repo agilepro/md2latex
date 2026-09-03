@@ -1,27 +1,23 @@
 package com.purplehillsbooks.md2latex;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.file.Path;
-
 import com.purplehillsbooks.exception.CommonException;
+import java.io.IOException;
+import java.nio.file.Path;
 
 /**
  * Command line entry point.
  *
- * <p>Two jobs: build the book described by a manifest, or scaffold a starter
- * manifest for a folder of Markdown.
+ * <p>Two jobs: build the book described by a manifest, or scaffold a starter manifest for a folder
+ * of Markdown.
  */
 public final class Main {
 
-    private Main() {
-    }
+    private Main() {}
 
     /**
-     * Process entry point. The only reason {@link System#exit} appears here at
-     * all is that {@code main} returns void, so it is the sole way to hand a
-     * non-zero status back to the shell. The success path simply returns, which
-     * already yields status 0.
+     * Process entry point. The only reason {@link System#exit} appears here at all is that {@code
+     * main} returns void, so it is the sole way to hand a non-zero status back to the shell. The
+     * success path simply returns, which already yields status 0.
      */
     public static void main(String[] args) {
         int status = run(args);
@@ -31,8 +27,8 @@ public final class Main {
     }
 
     /**
-     * Testable entry point: returns the exit code rather than setting it, so
-     * the whole command line can be exercised without killing the JVM.
+     * Testable entry point: returns the exit code rather than setting it, so the whole command line
+     * can be exercised without killing the JVM.
      *
      * @return 0 on success, 1 on an I/O or manifest error, 2 on a usage error
      */
@@ -67,8 +63,7 @@ public final class Main {
 
     // ------------------------------------------------------------------
 
-    private static int build(Options opts)
-            throws Exception {
+    private static int build(Options opts) throws Exception {
         Path manifestFile = ManifestReader.locate(opts.manifest);
         Manifest manifest = ManifestReader.read(manifestFile);
 
@@ -93,16 +88,16 @@ public final class Main {
             System.err.println();
         }
 
-        System.out.println("Wrote " + result.chapterFiles().size()
-                + " chapter file(s) and 1 master document to "
-                + manifest.output().directory());
+        System.out.println(
+                "Wrote "
+                        + result.chapterFiles().size()
+                        + " chapter file(s) and 1 master document to "
+                        + manifest.output().directory());
 
         String main = manifest.output().mainFile();
-        String jobName = main.endsWith(".tex")
-                ? main.substring(0, main.length() - 4)
-                : main;
-        System.out.print("Build with:  cd \"" + manifest.output().directory()
-                + "\" && pdflatex " + main);
+        String jobName = main.endsWith(".tex") ? main.substring(0, main.length() - 4) : main;
+        System.out.print(
+                "Build with:  cd \"" + manifest.output().directory() + "\" && pdflatex " + main);
         if (result.hasIndex()) {
             // An index needs makeindex between two pdflatex runs; one pass
             // alone leaves the index empty.

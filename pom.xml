@@ -14,7 +14,7 @@
   <description>Converts GitHub-flavored Markdown to LaTeX</description>
 
   <properties>
-    <maven.compiler.release>17</maven.compiler.release>
+    <maven.compiler.release>21</maven.compiler.release>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <commonmark.version>0.30.0</commonmark.version>
   </properties>
@@ -121,6 +121,19 @@
             </configuration>
           </execution>
         </executions>
+      </plugin>
+      <plugin>
+          <groupId>com.diffplug.spotless</groupId>
+          <artifactId>spotless-maven-plugin</artifactId>
+          <version>2.43.0</version>
+          <configuration>
+              <java>
+                  <googleJavaFormat>
+                      <version>1.22.0</version>
+                      <style>AOSP</style>
+                  </googleJavaFormat>
+              </java>
+          </configuration>
       </plugin>
     </plugins>
   </build>
