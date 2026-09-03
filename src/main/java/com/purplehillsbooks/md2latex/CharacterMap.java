@@ -160,6 +160,28 @@ public final class CharacterMap {
         math(m, '\u266F', "sharp");
         math(m, '\u266D', "flat");
 
+        // ---- Quotation marks ----------------------------------------------
+        // TeX builds directional quotes out of backticks and apostrophes, and
+        // has no straight quote for prose at all. Passing the Unicode character
+        // through instead would depend on the engine and the font encoding;
+        // these four sequences are how TeX has always spelled them and work
+        // under pdflatex and xelatex alike.
+        //
+        // The straight " is not here: whether it opens or closes depends on
+        // where it sits, so Quotes decides that first and hands one of these
+        // two characters on.
+        text(m, '\u201c', "``");
+        text(m, '\u201d', "''");
+        text(m, '\u2018', "`");
+        text(m, '\u2019', "'");
+
+        // ---- Dashes --------------------------------------------------------
+        // TeX counts hyphens: two make an en dash, three make an em dash. The
+        // Unicode characters need no reading, unlike a run of plain hyphens,
+        // which Dashes has to interpret from its surroundings.
+        text(m, '—', "---");
+        text(m, '–', "--");
+
         // ---- Text-mode punctuation and symbols ----------------------------
         // Characters at or below U+017F are already setable by T1 and are
         // deliberately left alone here.

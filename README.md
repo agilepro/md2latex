@@ -219,6 +219,105 @@ unsupported images, lists nested more than four deep, table rows wider than
 their header, and `\end{verbatim}` inside a verbatim code block. Every problem
 in every file is reported in one run.
 
+## Quotation marks
+
+TeX has no straight quote for prose: it builds the opening mark from two
+backticks and the closing mark from two apostrophes. Quotes are translated to
+that spelling automatically, whichever way you type them.
+
+| You write | Output | Renders as |
+|---|---|---|
+| `“` | `` `` `` | opening double |
+| `”` | `''` | closing double |
+| `‘` | `` ` `` | opening single |
+| `’` | `'` | closing single, apostrophe |
+| `"` | `` `` `` or `''` | whichever the position calls for |
+
+The straight `"` is the only one needing a decision, and it is positional: it
+opens at the start of a paragraph, after a space, or after an opening bracket or
+dash, and closes anywhere else. So
+
+```markdown
+"Hello," she said, "and goodbye."
+```
+
+comes out as ``` ``Hello,'' she said, ``and goodbye.'' ```. A quotation spanning
+emphasis works too — the two marks sit in different places in the document but
+the decision still sees what came before, so `A "quote with **bold** inside"`
+opens and closes correctly.
+
+### Nested quotations
+
+A single-quoted word inside a double-quoted phrase works, typed either way:
+
+```markdown
+"He said 'hello' to me"      →   ``He said `hello' to me''
+“He said ‘hello’ to me”      →   ``He said `hello' to me''
+```
+
+Two things make this work. First, a straight `'` is normally an apostrophe —
+`don't`, `Jones'` — but **inside** a double-quoted phrase, one in opening
+position is read as a nested quotation instead. Outside a quotation it is always
+left alone, so `The '90s were good` keeps its apostrophe; so does `"Back in the
+'90s,"`, because an apostrophe before a digit is an elision, never a quotation.
+
+Second, when the marks meet, a thin space `\,` is inserted between them. This
+matters: TeX reads runs of apostrophes greedily, so the closing single of a
+nested quotation followed by the closing double around it — `'` then `''` —
+would otherwise be read as `''` then `'` and **print the two marks in the wrong
+order**. So:
+
+```markdown
+"he said 'hello'"            →   ``he said `hello'\,''
+"'hello' he said"            →   ``\,`hello' he said''
+```
+
+which is also how a typesetter would set them.
+
+The elisions that stay ambiguous are `'twas` and `rock 'n' roll` *inside* a
+quotation — nothing in the shape distinguishes those from an opening mark. Write
+them with `’` if you have any.
+
+### Left alone
+
+- **Straight quotes inside code**, both `` `inline` `` and fenced blocks. Code
+  keeps the characters you wrote.
+- **The straight single quote outside a quotation.** TeX already sets `'` as a
+  right single quote, which is what `don't`, `the '90s` and `Jones'` all need.
+
+A measurement like `6"` becomes a closing mark, which is the conventional
+stand-in for an inch sign. For a genuine prime, write `′` or `″`. If you need a
+literal straight quote in prose, the escape hatch works: `<!-- latex: " -->`.
+
+## Dashes
+
+TeX tells the three dashes apart by how many hyphens are written, and a keyboard
+has only the one key, so a run of hyphens is read for what it means:
+
+| You write | Output | Renders as |
+|---|---|---|
+| `well-known` | `-` | hyphen |
+| `pages 3-5` | `--` | en dash, the numeric range |
+| `--` | `---` | em dash |
+| `—` | `---` | em dash |
+| `–` | `--` | en dash |
+
+A single hyphen stays a hyphen unless there is a **digit on both sides**, which
+makes it a range: `pages 3-5` and `2020-2021` become en dashes, while `A-1` and
+`catch-22` stay hyphenated. Two hyphens are Markua's way of writing an em dash
+and become three; three are already an em dash and are left alone.
+
+Each run is read once, so `3-5` becomes an en dash and stops there rather than
+being picked up again as an em dash. If you want an em dash between numerals,
+write `3--5` — the range rule needs a *single* hyphen, so two is always taken as
+you asking for an em dash.
+
+Code keeps the hyphens you wrote, in both `` `inline` `` spans and fenced
+blocks, so a command line like `` `git log --oneline` `` is safe. **Write
+command-line flags in code spans**: `--verbose` in ordinary prose becomes an em
+dash followed by `verbose`, because there is no way to tell it from an author
+asking for a dash.
+
 ## Unusual characters
 
 Characters with an exact LaTeX equivalent are translated automatically — you do
@@ -267,7 +366,9 @@ converter/
       LatexSafety.java     what pdflatex can actually typeset
       IndexTerms.java      index term collection and matching
       CharacterMap.java    Unicode to LaTeX translation table
+      Quotes.java          straight quotes made directional by position
+      Dashes.java          hyphen, en dash and em dash told apart
       Preamble.java        preamble and document wrapper
       Problem.java / ConversionException.java   located errors
-  src/test/java/...        190 tests
+  src/test/java/...        242 tests
 ```

@@ -123,6 +123,13 @@ public final class LatexVisitor extends AbstractVisitor {
     /** True while rendering the text of a heading. */
     private boolean inHeading;
 
+    /**
+     * Decides whether each straight quote opens or closes. Stateful and carried across nodes,
+     * because a quotation routinely spans them, and reset at the start of each block, where a mark
+     * can only be an opening one.
+     */
+    private final Quotes quotes = new Quotes();
+
     public LatexVisitor(RenderContext ctx) {
         this.ctx = ctx;
     }
@@ -145,6 +152,7 @@ public final class LatexVisitor extends AbstractVisitor {
         sb.append('\\').append(ctx.headingCommand(heading.getLevel())).append('{');
         String override = heading.getLevel() == 1 ? ctx.takeTitleOverride() : null;
         headingIndexEntries.clear();
+        quotes.startBlock();
         if (override != null) {
             sb.append(LatexEscaper.text(override));
         } else {
@@ -178,6 +186,7 @@ public final class LatexVisitor extends AbstractVisitor {
 
     @Override
     public void visit(Paragraph paragraph) {
+        quotes.startBlock();
         List<IndexTerms.Term> hits =
                 indexingAllowed() ? claimIndexTerms(indexText(paragraph)) : List.of();
         if (!hits.isEmpty()) {
@@ -456,7 +465,12 @@ public final class LatexVisitor extends AbstractVisitor {
     @Override
     public void visit(Text text) {
         checkCharacters(text, text.getLiteral(), "text");
-        sb.append(LatexEscaper.text(text.getLiteral()));
+        // Punctuation an author cannot type directly is worked out first, so
+        // that the result goes through the same CharacterMap translation as the
+        // form an author who could type it would have written. Dashes before
+        // quotes, because a dash is opening context for a quotation mark.
+        String literal = Dashes.convert(text.getLiteral());
+        sb.append(LatexEscaper.text(quotes.directional(literal)));
     }
 
     @Override
@@ -472,16 +486,21 @@ public final class LatexVisitor extends AbstractVisitor {
     @Override
     public void visit(Code code) {
         checkCharacters(code, code.getLiteral(), "inline code");
+        // A code span is content, not punctuation: a quote right after it is a
+        // closing one. Its own straight quotes are left exactly as written.
+        quotes.passThrough(code.getLiteral());
         sb.append("\\texttt{").append(LatexEscaper.text(code.getLiteral())).append('}');
     }
 
     @Override
     public void visit(SoftLineBreak softLineBreak) {
+        quotes.lineBreak();
         sb.append('\n');
     }
 
     @Override
     public void visit(HardLineBreak hardLineBreak) {
+        quotes.lineBreak();
         sb.append("\\\\\n");
     }
 
@@ -603,6 +622,8 @@ public final class LatexVisitor extends AbstractVisitor {
             if (cell.getPrevious() != null) {
                 sb.append(" & ");
             }
+            // A cell holds inlines directly, with no paragraph to reset context.
+            quotes.startBlock();
             if (cell.isHeader()) {
                 wrap("\\textbf{", cell);
             } else {

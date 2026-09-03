@@ -9,6 +9,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -139,8 +140,9 @@ class CharacterMapTest {
     @Test
     void alreadySupportedCharactersAreNotRemapped() {
         // Anything T1 can already set must pass through untouched, so existing
-        // documents keep rendering exactly as they did.
-        for (int cp : new int[] {'a', 'Z', '1', 0x00E9, 0x00F1, 0x0141, 0x2019, 0x2014, 0x201C}) {
+        // documents keep rendering exactly as they did. The exceptions are the
+        // marks TeX spells its own way; see SPELLED_BY_TEX.
+        for (int cp : new int[] {'a', 'Z', '1', 0x00E9, 0x00F1, 0x0141, 0x2010, 0x2026}) {
             assertFalse(
                     CharacterMap.contains(cp),
                     "U+"
@@ -165,6 +167,29 @@ class CharacterMapTest {
         }
     }
 
+    /**
+     * The quotes and dashes are where a character T1 could set is translated anyway. TeX has its own
+     * spelling for both - backticks and apostrophes for a quotation, counted hyphens for a dash -
+     * and that spelling is right under every engine and font encoding, whereas the literal character
+     * depends on both.
+     */
+    private static final Set<Integer> SPELLED_BY_TEX =
+            Set.of((int) '“', (int) '”', (int) '‘', (int) '’', (int) '—', (int) '–');
+
+    @Test
+    void quotationMarksAreTranslatedAnyway() {
+        assertEquals("``", CharacterMap.replacement('“'));
+        assertEquals("''", CharacterMap.replacement('”'));
+        assertEquals("`", CharacterMap.replacement('‘'));
+        assertEquals("'", CharacterMap.replacement('’'));
+    }
+
+    @Test
+    void unicodeDashesAreTranslatedAnyway() {
+        assertEquals("---", CharacterMap.replacement('—'));
+        assertEquals("--", CharacterMap.replacement('–'));
+    }
+
     @Test
     void everyMappedCharacterCountsAsSupported() {
         for (int cp : CharacterMap.entries().keySet()) {
@@ -174,7 +199,9 @@ class CharacterMapTest {
                     LatexSafety.firstUnsupportedChar(s),
                     "U+" + Integer.toHexString(cp) + " is mapped and should pass");
             assertTrue(
-                    LatexSafety.firstUnsupportedChar(s, false) >= 0 || cp <= 0x17F,
+                    LatexSafety.firstUnsupportedChar(s, false) >= 0
+                            || cp <= 0x17F
+                            || SPELLED_BY_TEX.contains(cp),
                     "U+"
                             + Integer.toHexString(cp)
                             + " should still be rejected where no translation applies");

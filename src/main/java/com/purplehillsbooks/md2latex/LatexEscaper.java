@@ -38,6 +38,7 @@ public final class LatexEscaper {
             String mapped = translate ? CharacterMap.replacement(cp) : null;
             if (mapped != null) {
                 // Replacements are raw LaTeX and must not be escaped.
+                separateQuotes(out, mapped.isEmpty() ? '\0' : mapped.charAt(0));
                 out.append(mapped);
             } else if (width == 1) {
                 char c = (char) cp;
@@ -48,7 +49,10 @@ public final class LatexEscaper {
                     case '~' -> out.append("\\textasciitilde{}");
                     case '^' -> out.append("\\textasciicircum{}");
                     case '#', '$', '%', '&', '_' -> out.append('\\').append(c);
-                    default -> out.append(c);
+                    default -> {
+                        separateQuotes(out, c);
+                        out.append(c);
+                    }
                 }
             } else {
                 // Untranslated astral character; the safety check reports it.
@@ -57,6 +61,31 @@ public final class LatexEscaper {
             i += width;
         }
         return out.toString();
+    }
+
+    /**
+     * Keeps two quotation marks that meet from ligating into one wrong mark.
+     *
+     * <p>TeX reads runs of backticks and apostrophes greedily and left to right, so the closing
+     * single quote of a nested quotation followed by the closing double quote around it - {@code
+     * '} then {@code ''} - is read as {@code ''} then {@code '} and prints the two marks in the
+     * wrong order. A thin space between them settles it, and is what a typesetter would put there
+     * in any case.
+     *
+     * <p>Only marks that meet across a boundary are separated. The two backticks within a single
+     * opening quote are meant to ligate and are appended as one unit, so they never reach here.
+     */
+    private static void separateQuotes(StringBuilder out, char next) {
+        if (out.length() == 0 || !isQuoteMark(next)) {
+            return;
+        }
+        if (isQuoteMark(out.charAt(out.length() - 1))) {
+            out.append("\\,");
+        }
+    }
+
+    private static boolean isQuoteMark(char c) {
+        return c == '`' || c == '\'';
     }
 
     /**
