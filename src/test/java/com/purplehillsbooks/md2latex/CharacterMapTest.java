@@ -66,6 +66,16 @@ class CharacterMapTest {
     }
 
     @Test
+    void anEllipsisIsSetAsSpacedPeriods() {
+        assertTrue(convert("He waited… then left.\n").contains("waited . . .  then left."));
+    }
+
+    @Test
+    void anEllipsisInsideAWordKeepsItsNeighbours() {
+        assertTrue(convert("a…b\n").contains("a . . . b"));
+    }
+
+    @Test
     void translatedTextProducesNoError() {
         convert("Input → output where x ≤ y, with α and ✓.\n");
         assertTrue(errors().isEmpty(), errors().stream().map(Problem::format).toList().toString());
@@ -142,7 +152,7 @@ class CharacterMapTest {
         // Anything T1 can already set must pass through untouched, so existing
         // documents keep rendering exactly as they did. The exceptions are the
         // marks TeX spells its own way; see SPELLED_BY_TEX.
-        for (int cp : new int[] {'a', 'Z', '1', 0x00E9, 0x00F1, 0x0141, 0x2010, 0x2026}) {
+        for (int cp : new int[] {'a', 'Z', '1', 0x00E9, 0x00F1, 0x0141, 0x2010, 0x2020}) {
             assertFalse(
                     CharacterMap.contains(cp),
                     "U+"
@@ -168,13 +178,13 @@ class CharacterMapTest {
     }
 
     /**
-     * The quotes and dashes are where a character T1 could set is translated anyway. TeX has its own
-     * spelling for both - backticks and apostrophes for a quotation, counted hyphens for a dash -
-     * and that spelling is right under every engine and font encoding, whereas the literal character
-     * depends on both.
+     * The quotes, dashes and ellipsis are where a character T1 could set is translated anyway. TeX
+     * has its own spelling for each - backticks and apostrophes for a quotation, counted hyphens for
+     * a dash, spaced periods for an ellipsis - and that spelling is right under every engine and
+     * font encoding, whereas the literal character depends on both.
      */
     private static final Set<Integer> SPELLED_BY_TEX =
-            Set.of((int) '“', (int) '”', (int) '‘', (int) '’', (int) '—', (int) '–');
+            Set.of((int) '“', (int) '”', (int) '‘', (int) '’', (int) '—', (int) '–', (int) '…');
 
     @Test
     void quotationMarksAreTranslatedAnyway() {
@@ -182,6 +192,11 @@ class CharacterMapTest {
         assertEquals("''", CharacterMap.replacement('”'));
         assertEquals("`", CharacterMap.replacement('‘'));
         assertEquals("'", CharacterMap.replacement('’'));
+    }
+
+    @Test
+    void theEllipsisBecomesThreeSpacedPeriods() {
+        assertEquals(" . . . ", CharacterMap.replacement('…'));
     }
 
     @Test

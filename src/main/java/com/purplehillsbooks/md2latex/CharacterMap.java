@@ -182,6 +182,11 @@ public final class CharacterMap {
         text(m, '—', "---");
         text(m, '–', "--");
 
+        // ---- Ellipsis ------------------------------------------------------
+        // Set as three spaced periods rather than the tight run that the single
+        // character would give.
+        text(m, '…', " . . . ");
+
         // ---- Text-mode punctuation and symbols ----------------------------
         // Characters at or below U+017F are already setable by T1 and are
         // deliberately left alone here.

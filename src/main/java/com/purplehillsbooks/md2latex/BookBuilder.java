@@ -178,6 +178,7 @@ public final class BookBuilder {
         for (Pending p : pending) {
             Files.writeString(p.target(), p.contents(), StandardCharsets.UTF_8);
             written.add(p.target());
+            System.out.println("Wrote file " + p.target());
         }
 
         MemFile mainDocument = new MemFile();
