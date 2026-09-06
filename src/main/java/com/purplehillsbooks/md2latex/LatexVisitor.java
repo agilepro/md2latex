@@ -358,7 +358,7 @@ public final class LatexVisitor extends AbstractVisitor {
      * use.
      */
     private void beginAdmonition(String literal) {
-        String kind = MarkdownLoader.unattr(group(ADM_KIND, literal, "note"));
+        String kind = LatexMarkerSink.unattr(group(ADM_KIND, literal, "note"));
         String title = group(ADM_TITLE, literal, null);
         boolean untitled = title == null && ADM_UNTITLED.matcher(literal).find();
 
@@ -373,7 +373,9 @@ public final class LatexVisitor extends AbstractVisitor {
             return;
         }
         String display =
-                title != null && !title.isBlank() ? MarkdownLoader.unattr(title) : capitalize(kind);
+                title != null && !title.isBlank()
+                        ? LatexMarkerSink.unattr(title)
+                        : capitalize(kind);
         openBlocks.push("admonition");
         sb.append("\\begin{admonition}{").append(LatexEscaper.text(display)).append("}\n");
     }
@@ -404,7 +406,7 @@ public final class LatexVisitor extends AbstractVisitor {
         if (!m.find()) {
             return false;
         }
-        String term = IndexTerms.normalize(MarkdownLoader.unattr(m.group(1)));
+        String term = IndexTerms.normalize(LatexMarkerSink.unattr(m.group(1)));
         if (term.isEmpty()) {
             ctx.error(
                     node,

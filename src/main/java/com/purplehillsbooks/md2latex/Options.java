@@ -3,7 +3,9 @@ package com.purplehillsbooks.md2latex;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Command line options, parsed by hand to keep the shaded jar free of a third-party CLI dependency.
@@ -25,20 +27,26 @@ public final class Options {
     /** Title to seed a scaffolded manifest with. */
     public String initTitle = "Untitled Book";
 
+    /** Targets named with --target, or empty for everything the manifest describes. */
+    public final Set<Target> targets = EnumSet.noneOf(Target.class);
+
     public boolean verbose;
     public boolean help;
 
     public static final String USAGE =
             """
-            md2latex - build a LaTeX book from Markdown, driven by a manifest
+            md2latex - build a book from Markua, as LaTeX or as a Docusaurus site
 
             USAGE
-              md2latex <manifest>            build the book described by a manifest
+              md2latex <manifest>            build what the manifest describes
               md2latex --init <source-dir>   write a starter manifest for a folder
 
               <manifest>  a *.manifest file, or a directory containing exactly one
 
             OPTIONS
+              -t, --target <list>   which outputs to build: latex, docusaurus, or
+                                    both separated by a comma. Default: every one
+                                    the manifest describes.
               -o, --output <path>   where --init writes the manifest
                                     (default: <source-dir>/book.manifest)
                   --title <text>    title to seed a scaffolded manifest with
@@ -66,10 +74,21 @@ public final class Options {
                 subtitle    optional. Set smaller under the title.
                 author      optional.
                 date        optional. Empty means no date is printed.
-                output:
+                latex:      where the LaTeX book goes. Omit the whole block, and
+                            name a docusaurus block, to build no LaTeX at all.
                   directory   where .tex files go.       Default: latex
                   main        master file name.          Default: book.tex
-                  chapters    subdirectory for chapters. Default: chapters
+                docusaurus: where the site pages go. Omit to build no site.
+                  directory   required. A folder in the site's docs tree.
+                  category    label for the generated _category_.json.
+                              Default: the book title. 'none' writes no file.
+                  position    sidebar position of the section itself.
+                  format      md | mdx | none.           Default: md
+                              Written into each page's front matter. 'md' has
+                              Docusaurus read the file as CommonMark rather than
+                              MDX, so a stray brace or less-than sign in ordinary
+                              prose cannot fail the site build.
+                  assets      copy referenced images etc. Default: true
                 document:
                   class       book | report | article.   Default: book
                   toc         Default: true
@@ -82,7 +101,16 @@ public final class Options {
                               file    the Markdown file
                               title   overrides the file's H1
                             or a mapping with:
-                              part    inserts a \\part divider, reads no file
+                              part    inserts a \\part divider in the book, and
+                                      a sidebar category on the site
+
+              A manifest naming neither 'latex' nor 'docusaurus' builds LaTeX,
+              which is what every manifest written before the site target
+              existed means.
+
+            THE SOURCE
+              Always read as Markua, which also accepts Docusaurus ::: blocks.
+              There is no longer a 'dialect' key to set.
 
             MARKDOWN FRONT MATTER
               Chapter files may carry a YAML header. Recognised keys:
@@ -108,7 +136,7 @@ public final class Options {
                           <!-- latex: \\index{tribe!in-group} -->
 
             OUTPUT
-              A complete, compilable set of files, relative to the manifest:
+              A complete, compilable set of LaTeX files:
 
                 latex/book.tex               master document
                 latex/chapters/01-....tex    one file per chapter, \\input by the master
@@ -121,10 +149,28 @@ public final class Options {
 
               The exact command is printed at the end of every build.
 
+              And a docs section ready for Docusaurus to serve:
+
+                _category_.json              the book, as one sidebar section
+                introduction.md              one page per chapter, same name
+                part-two/                    a manifest 'part:' divider
+                images/tribe.png             copied from beside the Markua
+
+              A page keeps the name of the Markua file it came from; the order
+              of the book is carried by the sidebar_position front matter and
+              by each folder's _category_.json instead. Two chapters that would
+              land on the same name are an error rather than a lost chapter.
+
+              Everything in that folder is generated and none of it should be
+              edited: a page whose chapter leaves the manifest is removed on the
+              next run. Index entries are dropped, since a site has no index,
+              and blurbs become ::: admonitions.
+
             EXAMPLES
               md2latex --init docs/Morality --title "Essentials of Moral Realism"
               md2latex docs/Morality/book.manifest -v
               md2latex docs/Morality
+              md2latex docs/Morality --target docusaurus
             """;
 
     public static Options parse(String[] args) {
@@ -140,6 +186,13 @@ public final class Options {
                 case "--init" -> o.initFrom = Paths.get(requireValue(args, ++i, a));
                 case "-o", "--output" -> output = Paths.get(requireValue(args, ++i, a));
                 case "--title" -> o.initTitle = requireValue(args, ++i, a);
+                case "-t", "--target" -> {
+                    for (String name : requireValue(args, ++i, a).split(",")) {
+                        if (!name.isBlank()) {
+                            o.targets.add(Target.parse(name));
+                        }
+                    }
+                }
                 default -> {
                     if (a.startsWith("-") && a.length() > 1) {
                         throw new IllegalArgumentException("Unknown option: " + a);
@@ -154,6 +207,11 @@ public final class Options {
         }
 
         if (o.initFrom != null) {
+            if (!o.targets.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "--target only applies to a build; --init writes a manifest and produces "
+                                + "no output of its own.");
+            }
             if (!positional.isEmpty()) {
                 throw new IllegalArgumentException(
                         "--init takes the source directory as its value; unexpected extra "

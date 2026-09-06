@@ -1,8 +1,14 @@
 # md2latex
 
-Builds a LaTeX book from a folder of GitHub-flavored Markdown. One manifest
-describes one book; the output is a master `.tex` plus one file per chapter,
-ready to compile.
+Builds a book from a folder of Markua. One manifest describes one book, and the
+same source produces either or both of two outputs:
+
+- **LaTeX** — a master `.tex` plus one file per chapter, ready to compile.
+- **Docusaurus** — a folder of Markdown inside a site's `docs` tree, with the
+  sidebar order, the categories and the images already in place.
+
+The two are read by the same front end and gated by the same errors, so they
+cannot drift apart or disagree about whether the source was sound.
 
 ## Build the tool
 
@@ -31,16 +37,19 @@ order, delete anything that should not be in the book, and set the author.
 You only need `--init` once. Running it again overwrites the manifest and loses
 your edits; use `-o` to write somewhere else if you want to compare.
 
-**2. Build the LaTeX:**
-
-Run the command in the folder that holds the converter.
+**2. Build.** Run the command in the folder that holds the converter.
 
 ```bash
 java -jar target/md2latex.jar docs/Morality/book.manifest
 ```
 
 Passing the folder instead of the file works too, as long as it holds exactly
-one `*.manifest`.
+one `*.manifest`. Every target the manifest describes is built. To build just
+one of them:
+
+```bash
+java -jar target/md2latex.jar docs/Morality --target docusaurus
+```
 
 **3. Compile the PDF.** The exact command is printed at the end of every build:
 
@@ -68,9 +77,16 @@ subtitle: "A short book"
 author:   "Your Name"
 date:     ""                  # empty prints no date
 
-output:
+latex:                        # omit the block to build no book
   directory: ../../latex      # where the .tex files go
   main:      book.tex
+
+docusaurus:                   # omit the block to build no site
+  directory: ../../site/docs/morality
+  category:  "Moral Realism"  # sidebar label. Default: the book title
+  position:  2                # where the section sits in the sidebar
+  format:    md               # md | mdx | none
+  assets:    true             # copy referenced images alongside
 
 document:
   class:       book           # book | report | article
@@ -79,7 +95,6 @@ document:
   numberDepth: 2
 
 code: listings                # listings | minted | verbatim
-dialect: docusaurus           # docusaurus | markua
 
 preamble:                     # raw lines appended to the preamble
   - \usepackage{microtype}
@@ -97,8 +112,11 @@ appendices:
   - ../shared/appendix.md         # a file outside the folder is fine
 ```
 
-An unrecognized key is an error rather than being silently
-ignored, which catches typos like `autor:`.
+An unrecognized key is an error rather than being silently ignored, which
+catches typos like `autor:`. A manifest naming neither `latex:` nor
+`docusaurus:` builds LaTeX into `latex/`, which is what every manifest written
+before the site target existed means. `output:` is still accepted as the old
+name for `latex:`.
 
 ## Markdown front matter
 
@@ -131,17 +149,15 @@ the converter cannot express.
 
 Headings, emphasis, lists, block quotes, tables, images, footnotes, task lists,
 strikethrough, links, and fenced code blocks. Docusaurus `:::tip[Title]`
-admonitions become a framed block. Relative `.md` links keep their text and drop
-the unresolvable target.
+admonitions become a framed block in the book and stay as they are on the site.
+For LaTeX, relative `.md` links keep their text and drop the unresolvable
+target; for Docusaurus they are repointed at the generated page.
 
 ## Markua
 
-Set `dialect: markua` in the manifest and two more pieces of syntax are
-recognized. It is opt-in because both are ordinary prose in plain Markdown — a
-line starting `A>` is just text, and `{i: ...}` is just a word in braces — so
-turning them on unconditionally would silently rewrite existing documents.
-Docusaurus `:::` admonitions keep working when it is on, so a folder holding
-both kinds of source converts in one run.
+Source is always read as Markua. There is no `dialect:` key any more —
+Docusaurus `:::` admonitions are recognized as well, so a folder holding both
+kinds of source converts in one run.
 
 **Blurbs**, in both the fenced form and the older line-prefix form:
 
@@ -191,6 +207,76 @@ Attribute lists on images, code blocks and tables, cross references, and part
 and matter structure attributes are **not** supported. A `{width: 40%}` line
 above an image is passed through as ordinary text.
 
+## The Docusaurus output
+
+Name a `docusaurus:` block and the same source is written a second time, as
+Markdown a site can serve. **Everything in that folder is generated and none of
+it should be edited**: the Markua stays where it is and the site is built from
+it, which is the whole point of keeping the two trees apart.
+
+```
+site/docs/morality/
+    _category_.json           the book, as one section of the sidebar
+    introduction.md
+    what-morality-is.md
+    part-two/                 from a manifest 'part:' divider
+        _category_.json
+        the-argument.md
+    images/tribe.png          copied from beside the Markua
+    .md2latex-generated       the list of what was generated
+```
+
+**A page keeps the name of the Markua file it came from**, exactly as written —
+not lower-cased and not slugged — so the generated tree reads against its source
+and anything already linking to a page still finds it. The only name that
+changes is a `.markdown` extension, which becomes `.md` because Docusaurus does
+not collect the longer spelling.
+
+Order is carried by the `sidebar_position` front matter and by each folder's
+`_category_.json`, so nothing needs encoding in a filename as well. Two chapters
+that would land on the same page — `intro.md` and `../shared/intro.md`, say —
+stop the build with both paths named, rather than one quietly overwriting the
+other.
+
+The manifest already says everything a sidebar needs, so none of it has to be
+repeated in `sidebars.js`. Order comes from the chapter list, a `part:` divider
+becomes a folder with its own category, and appendices come back to the top
+level. A page whose chapter is later dropped from the manifest is removed on the
+next run — that is what the stamp file is for, and it also clears out pages left
+by an earlier version of the converter. A file the converter did not write is
+never touched.
+
+What changes on the way across:
+
+| Markua | LaTeX | Docusaurus |
+|---|---|---|
+| `W>`, `{blurb, class: warning}` | `\begin{admonition}{Warning}` | `:::warning` |
+| `A>` aside, `X>` exercise, `D>` discussion … | a framed block | the nearest of Docusaurus's five types, keeping its own name as the title: `:::info[Exercise]` |
+| `B>` untitled blurb | `admonitionplain` | a blockquote — Docusaurus has no admonition without a heading |
+| `C>` centred | `\begin{center}` | `<div align="center">`, which works as both HTML and JSX |
+| `{i: "tribe"}`, `indexTerms:` | `\index{}` and `makeindex` | **dropped** — a site has no index |
+| `<!-- latex: … -->` | emitted raw | dropped |
+| `<!-- docusaurus: … -->` | dropped | unwrapped and emitted raw |
+| `"` and `--` | `` `` ``, `''`, `---` | `“ ” – —` |
+| `→ α ≤ ✓ 😀` | `\ensuremath{…}`, or an error | left alone; a browser sets them |
+| `![x](images/x.png)` | path relative to the master `.tex` | copied into the site and repointed |
+| `[x](other.md)` | text kept, target dropped | repointed at the generated page |
+
+Two things worth knowing:
+
+**`format: md` is written into every page.** Docusaurus 3 parses `.md` as MDX,
+where `{` and `<` are JSX — so a stray brace or a `a < b` in ordinary prose
+fails the site build with an error pointing somewhere else. The `format` key
+tells Docusaurus to read the file as CommonMark instead. Set `format: mdx` if
+you want JSX, or `format: none` to write no key at all for a Docusaurus too old
+to know it.
+
+**Errors are target-scoped.** An emoji and an `.svg` image stop a LaTeX build
+and are perfectly fine on the web, so those checks only run for the book. A
+broken image is an error for LaTeX and a warning for the site. But the gate is
+shared: if either target refuses, *neither* is written, so the site can never
+get ahead of a book that will not compile.
+
 ## When it refuses
 
 Anything that would produce LaTeX that does not compile stops the build with a
@@ -198,7 +284,7 @@ located error, and **nothing is written** — so a failed run never leaves a
 half-written or stale book behind:
 
 ```
-conversion stopped: 2 problems in the Markdown would produce LaTeX that does not compile.
+conversion stopped: 2 problems in the Markdown would produce output that does not work.
 
 broken.md:6:22: error: the text contains U+1F600 '😀', which pdflatex cannot typeset
     Shipped the release 😀 and it went fine.
@@ -348,27 +434,48 @@ Exit codes: `0` success, `1` a manifest or conversion error, `2` a usage error.
 
 ## Layout
 
+The source is read once and written twice. `MarkdownLoader` finds the Markua and
+hands each construct to a `MarkuaSink`; which sink is plugged in is the whole of
+the difference between the two targets.
+
 ```
 converter/
   pom.xml
   src/main/java/com/purplehillsbooks/md2latex/
       Main.java            CLI entry point
       Options.java         argument parsing and usage text
+      Build.java           runs the targets, then writes if none refused
+      BuildPlan.java       what a build intends to put on disk
+      Target.java          latex | docusaurus
       Manifest.java        parsed manifest
       ManifestReader.java  YAML parsing and validation
       ManifestScaffold.java   --init
-      BookBuilder.java     converts every chapter, then writes the file set
-      Md2Latex.java        one Markdown document to a LaTeX fragment
-      MarkdownLoader.java  front matter, admonitions and Markua, with a line map
-      Dialect.java         which non-CommonMark syntax is recognised
+
+    read once, by both targets
+      MarkdownLoader.java  front matter, blurbs and markers, with a line map
+      InlineScanner.java   prose told apart from code, URLs, tags and markers
+      MarkuaSink.java      where what the reader finds is sent
+      Quotes.java          straight quotes made directional by position
+      Dashes.java          hyphen, en dash and em dash told apart
+      IndexTerms.java      index term collection and matching
+      Slug.java            safe file names
+      Problem.java / ConversionException.java   located errors
+
+    the LaTeX target
+      LatexMarkerSink.java Markua to HTML markers the parser can see
+      BookBuilder.java     the manifest as a set of .tex files
+      Md2Latex.java        one document to a LaTeX fragment
       LatexVisitor.java    the AST walk that emits LaTeX
       LatexEscaper.java    escaping
       LatexSafety.java     what pdflatex can actually typeset
-      IndexTerms.java      index term collection and matching
       CharacterMap.java    Unicode to LaTeX translation table
-      Quotes.java          straight quotes made directional by position
-      Dashes.java          hyphen, en dash and em dash told apart
       Preamble.java        preamble and document wrapper
-      Problem.java / ConversionException.java   located errors
-  src/test/java/...        242 tests
+
+    the Docusaurus target
+      DocusaurusSink.java  Markua to Docusaurus Markdown
+      DocusaurusBuilder.java  the manifest as a docs folder and its sidebar
+      Md2Docusaurus.java   one document, front matter and all
+      DocusaurusAssets.java   links repointed, images copied
+      DocusaurusCharacters.java   the much shorter web translation table
+  src/test/java/...        297 tests
 ```

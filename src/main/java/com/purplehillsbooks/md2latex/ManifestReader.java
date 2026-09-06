@@ -1,5 +1,6 @@
 package com.purplehillsbooks.md2latex;
 
+import com.purplehillsbooks.exception.CommonException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -32,10 +33,11 @@ public final class ManifestReader {
                     "subtitle",
                     "author",
                     "date",
+                    "latex",
                     "output",
+                    "docusaurus",
                     "document",
                     "code",
-                    "dialect",
                     "frontMatter",
                     "appendices",
                     "preamble",
@@ -48,12 +50,21 @@ public final class ManifestReader {
     private static final Map<String, String> REMOVED_KEYS =
             Map.of(
                     normalize("sourceDir"),
-                    "'sourceDir' is no longer used. A manifest lives in the folder with its "
-                            + "Markdown, and every relative path is resolved against that folder. "
-                            + "Delete the line; if a chapter lives elsewhere, give it a relative "
-                            + "path in 'chapters' such as ../shared/intro.md");
+                            "'sourceDir' is no longer used. A manifest lives in the folder with its "
+                                    + "Markdown, and every relative path is resolved against that "
+                                    + "folder. Delete the line; if a chapter lives elsewhere, give "
+                                    + "it a relative path in 'chapters' such as ../shared/intro.md",
+                    normalize("dialect"),
+                            "'dialect' is no longer used. Source is always read as Markua, which "
+                                    + "also accepts Docusaurus ::: admonitions, so there is nothing "
+                                    + "left to choose. Delete the line.");
 
-    private static final Set<String> OUTPUT_KEYS = normalizedSet("directory", "main", "chapters");
+    private static final Set<String> LATEX_KEYS = normalizedSet("directory", "main", "chapters");
+
+    private static final Set<String> DOCUSAURUS_KEYS =
+            normalizedSet("directory", "category", "position", "format", "assets");
+
+    private static final Set<String> DOCUSAURUS_FORMATS = Set.of("md", "mdx", "none");
 
     private static final Set<String> DOCUMENT_KEYS =
             normalizedSet("class", "toc", "tocDepth", "numberDepth");
@@ -106,80 +117,102 @@ public final class ManifestReader {
         return found.get(0);
     }
 
-    public static Manifest read(Path manifestFile) throws ManifestException {
-        Path file = manifestFile.toAbsolutePath().normalize();
-        if (!Files.isRegularFile(file)) {
-            throw new ManifestException("manifest not found: " + file);
-        }
-        Path base = file.getParent();
-
-        String text;
+    public static Manifest readManifest(Path manifestFile) throws ManifestException {
         try {
-            text = Files.readString(file, StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new ManifestException("cannot read " + file + ": " + e.getMessage(), e);
+            Path file = manifestFile.toAbsolutePath().normalize();
+            if (!Files.isRegularFile(file)) {
+                throw new ManifestException("manifest not found: " + file);
+            }
+            Path base = file.getParent();
+
+            String text;
+            try {
+                text = Files.readString(file, StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                throw new ManifestException("cannot read " + file + ": " + e.getMessage(), e);
+            }
+
+            Object root;
+            try {
+                LoaderOptions options = new LoaderOptions();
+                options.setAllowDuplicateKeys(false);
+                root = new Yaml(new SafeConstructor(options)).load(text);
+            } catch (YAMLException e) {
+                throw new ManifestException(
+                        file.getFileName() + ": invalid YAML - " + e.getMessage(), e);
+            }
+
+            if (root == null) {
+                throw new ManifestException(file.getFileName() + ": manifest is empty");
+            }
+            if (!(root instanceof Map<?, ?> rawMap)) {
+                throw new ManifestException(
+                        file.getFileName()
+                                + ": expected a mapping of settings at the top level, found "
+                                + typeName(root));
+            }
+
+            String where = file.getFileName().toString();
+            YamlMap top = new YamlMap(rawMap, where, "");
+            top.rejectRemovedKeys();
+            top.rejectUnknownKeys(TOP_LEVEL_KEYS);
+
+            String title = top.requireString("title");
+            String subtitle = top.optionalString("subtitle", null);
+            String author = top.optionalString("author", null);
+            String date = top.optionalString("date", null);
+
+            if (top.has("latex") && top.has("output")) {
+                throw new ManifestException(
+                        where
+                                + ": 'latex' and 'output' mean the same thing; keep 'latex' and delete"
+                                + " 'output'");
+            }
+            Manifest.Docusaurus docusaurus =
+                    readDocusaurus(top.optionalMap("docusaurus"), base, where, title);
+            // A manifest that names neither target is a LaTeX book, which is what
+            // every manifest written before Docusaurus existed means.
+            boolean latexAsked = top.has("latex") || top.has("output") || docusaurus == null;
+            Manifest.Latex latex =
+                    latexAsked
+                            ? readLatex(
+                                    top.has("output")
+                                            ? top.optionalMap("output")
+                                            : top.optionalMap("latex"),
+                                    base)
+                            : null;
+            Manifest.Document document = readDocument(top.optionalMap("document"), where);
+            CodeStyle codeStyle = readCodeStyle(top, where);
+            List<String> preamble = top.optionalStringList("preamble");
+
+            // Chapter paths resolve against the manifest's own directory. The three
+            // sections share one 'missing' list so a single run names every bad path.
+            List<String> missing = new ArrayList<>();
+            List<Manifest.Entry> frontMatter =
+                    readEntries(top, "frontMatter", false, base, where, missing);
+            List<Manifest.Entry> chapters =
+                    readEntries(top, "chapters", true, base, where, missing);
+            List<Manifest.Entry> appendices =
+                    readEntries(top, "appendices", false, base, where, missing);
+            reportMissing(missing, base, where);
+
+            return new Manifest(
+                    file,
+                    title,
+                    subtitle,
+                    author,
+                    date,
+                    latex,
+                    docusaurus,
+                    document,
+                    codeStyle,
+                    preamble,
+                    frontMatter,
+                    chapters,
+                    appendices);
+        } catch (Exception e) {
+            throw CommonException.newWrap("cannot read manifest file '%s'", e, manifestFile);
         }
-
-        Object root;
-        try {
-            LoaderOptions options = new LoaderOptions();
-            options.setAllowDuplicateKeys(false);
-            root = new Yaml(new SafeConstructor(options)).load(text);
-        } catch (YAMLException e) {
-            throw new ManifestException(
-                    file.getFileName() + ": invalid YAML - " + e.getMessage(), e);
-        }
-
-        if (root == null) {
-            throw new ManifestException(file.getFileName() + ": manifest is empty");
-        }
-        if (!(root instanceof Map<?, ?> rawMap)) {
-            throw new ManifestException(
-                    file.getFileName()
-                            + ": expected a mapping of settings at the top level, found "
-                            + typeName(root));
-        }
-
-        String where = file.getFileName().toString();
-        YamlMap top = new YamlMap(rawMap, where, "");
-        top.rejectRemovedKeys();
-        top.rejectUnknownKeys(TOP_LEVEL_KEYS);
-
-        String title = top.requireString("title");
-        String subtitle = top.optionalString("subtitle", null);
-        String author = top.optionalString("author", null);
-        String date = top.optionalString("date", null);
-
-        Manifest.Output output = readOutput(top.optionalMap("output"), base);
-        Manifest.Document document = readDocument(top.optionalMap("document"), where);
-        CodeStyle codeStyle = readCodeStyle(top, where);
-        Dialect dialect = readDialect(top, where);
-        List<String> preamble = top.optionalStringList("preamble");
-
-        // Chapter paths resolve against the manifest's own directory. The three
-        // sections share one 'missing' list so a single run names every bad path.
-        List<String> missing = new ArrayList<>();
-        List<Manifest.Entry> frontMatter =
-                readEntries(top, "frontMatter", false, base, where, missing);
-        List<Manifest.Entry> chapters = readEntries(top, "chapters", true, base, where, missing);
-        List<Manifest.Entry> appendices =
-                readEntries(top, "appendices", false, base, where, missing);
-        reportMissing(missing, base, where);
-
-        return new Manifest(
-                file,
-                title,
-                subtitle,
-                author,
-                date,
-                output,
-                document,
-                codeStyle,
-                dialect,
-                preamble,
-                frontMatter,
-                chapters,
-                appendices);
     }
 
     // ------------------------------------------------------------------
@@ -189,18 +222,56 @@ public final class ManifestReader {
     /** Default output folder. Deliberately not "build", which Docusaurus claims. */
     private static final String DEFAULT_OUTPUT_DIR = "latex";
 
-    private static Manifest.Output readOutput(YamlMap out, Path base) throws ManifestException {
+    private static Manifest.Latex readLatex(YamlMap out, Path base) throws ManifestException {
         if (out == null) {
-            return new Manifest.Output(base.resolve(DEFAULT_OUTPUT_DIR).normalize(), "book.tex");
+            return new Manifest.Latex(base.resolve(DEFAULT_OUTPUT_DIR).normalize(), "book.tex");
         }
-        out.rejectUnknownKeys(OUTPUT_KEYS);
+        out.rejectUnknownKeys(LATEX_KEYS);
         Path directory =
                 base.resolve(out.optionalString("directory", DEFAULT_OUTPUT_DIR)).normalize();
         String main = out.optionalString("main", "book.tex");
         if (!main.endsWith(".tex")) {
             main = main + ".tex";
         }
-        return new Manifest.Output(directory, main);
+        return new Manifest.Latex(directory, main);
+    }
+
+    /**
+     * The Docusaurus block. Absent means the site is not built at all, so unlike the LaTeX block
+     * this one has no defaults to fall back on and {@code directory} is required: there is no
+     * sensible guess at where somebody else's site keeps its docs.
+     */
+    private static Manifest.Docusaurus readDocusaurus(
+            YamlMap docs, Path base, String where, String title) throws ManifestException {
+        if (docs == null) {
+            return null;
+        }
+        docs.rejectUnknownKeys(DOCUSAURUS_KEYS);
+        String directory = docs.optionalString("directory", null);
+        if (directory == null) {
+            throw new ManifestException(
+                    where
+                            + ": 'docusaurus.directory' is required; it names the folder inside the"
+                            + " site's docs tree that this book is generated into, e.g."
+                            + " ../../site/docs/morality");
+        }
+        String format = docs.optionalString("format", "md").toLowerCase(Locale.ROOT);
+        if (!DOCUSAURUS_FORMATS.contains(format)) {
+            throw new ManifestException(
+                    where
+                            + ": docusaurus.format must be one of "
+                            + DOCUSAURUS_FORMATS
+                            + ", found '"
+                            + format
+                            + "'");
+        }
+        Integer position = docs.has("position") ? docs.optionalInt("position", 1) : null;
+        return new Manifest.Docusaurus(
+                base.resolve(directory).normalize(),
+                docs.optionalString("category", title),
+                position,
+                format,
+                docs.optionalBoolean("assets", true));
     }
 
     private static Manifest.Document readDocument(YamlMap doc, String where)
@@ -230,20 +301,6 @@ public final class ManifestReader {
         String code = top.optionalString("code", "listings");
         try {
             return CodeStyle.parse(code);
-        } catch (IllegalArgumentException e) {
-            throw new ManifestException(where + ": " + e.getMessage(), e);
-        }
-    }
-
-    /**
-     * Which extensions the Markdown may use. Markua syntax is opt-in because a line starting {@code
-     * A>}, or a {@code {i: ...}} in braces, is ordinary prose in plain Markdown and must not be
-     * silently reinterpreted.
-     */
-    private static Dialect readDialect(YamlMap top, String where) throws ManifestException {
-        String dialect = top.optionalString("dialect", null);
-        try {
-            return Dialect.parse(dialect);
         } catch (IllegalArgumentException e) {
             throw new ManifestException(where + ": " + e.getMessage(), e);
         }

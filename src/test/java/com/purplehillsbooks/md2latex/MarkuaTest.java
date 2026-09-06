@@ -10,10 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/**
- * Markua blurbs and inline index markers, which are recognised only when the manifest asks for
- * {@code dialect: markua}.
- */
+/** Markua blurbs and inline index markers, which every source file is now read for. */
 class MarkuaTest {
 
     private final List<Problem> problems = new ArrayList<>();
@@ -21,19 +18,13 @@ class MarkuaTest {
     private final Path sourceFile = here.resolve("test.md");
 
     private String convert(String markdown) {
-        return new Md2Latex(CodeStyle.LISTINGS, false, problems, IndexTerms.none(), Dialect.MARKUA)
-                .convert(markdown, sourceFile, here)
-                .latex();
-    }
-
-    private String convertPlain(String markdown) {
-        return new Md2Latex(CodeStyle.LISTINGS, false, problems)
+        return new Md2Latex(CodeStyle.LISTINGS, false, problems, IndexTerms.none())
                 .convert(markdown, sourceFile, here)
                 .latex();
     }
 
     private String convertAsBook(String markdown) {
-        return new Md2Latex(CodeStyle.LISTINGS, true, problems, IndexTerms.none(), Dialect.MARKUA)
+        return new Md2Latex(CodeStyle.LISTINGS, true, problems, IndexTerms.none())
                 .convert(markdown, sourceFile, here)
                 .latex();
     }
@@ -274,20 +265,11 @@ class MarkuaTest {
     }
 
     // ------------------------------------------------------------------
-    // Dialect gating
+    // What Markua does not claim
     // ------------------------------------------------------------------
 
     @Test
-    void markuaSyntaxIsInertUnderTheDefaultDialect() {
-        String tex = convertPlain("A> Not a blurb.\n\nAnd a {i: \"tribe\"} marker.\n");
-        assertFalse(tex.contains("\\begin{admonition}"), tex);
-        assertFalse(tex.contains("\\index{"), tex);
-        assertTrue(tex.contains("A"), tex);
-        assertTrue(tex.contains("tribe"), tex);
-    }
-
-    @Test
-    void docusaurusAdmonitionsStillWorkUnderMarkua() {
+    void docusaurusAdmonitionsStillWork() {
         String tex = convert(":::tip[Key Takeaway]\n\nBody.\n\n:::\n");
         assertTrue(tex.contains("\\begin{admonition}{Key Takeaway}"), tex);
         assertTrue(tex.contains("\\end{admonition}"), tex);

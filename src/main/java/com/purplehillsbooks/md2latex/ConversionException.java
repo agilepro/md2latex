@@ -31,10 +31,13 @@ public class ConversionException extends Exception {
         List<Problem> warnings = problems.stream().filter(p -> !p.isError()).toList();
 
         StringBuilder b = new StringBuilder();
+        // Deliberately not "would produce LaTeX that does not compile": a fault
+        // found on the way to the site says nothing about LaTeX, and either one
+        // stops the whole build.
         b.append("conversion stopped: ")
                 .append(errors.size())
                 .append(errors.size() == 1 ? " problem" : " problems")
-                .append(" in the Markdown would produce LaTeX that does not compile.\n");
+                .append(" in the Markdown would produce output that does not work.\n");
 
         for (Problem p : errors) {
             b.append('\n').append(p.format()).append('\n');

@@ -179,9 +179,9 @@ class CharacterMapTest {
 
     /**
      * The quotes, dashes and ellipsis are where a character T1 could set is translated anyway. TeX
-     * has its own spelling for each - backticks and apostrophes for a quotation, counted hyphens for
-     * a dash, spaced periods for an ellipsis - and that spelling is right under every engine and
-     * font encoding, whereas the literal character depends on both.
+     * has its own spelling for each - backticks and apostrophes for a quotation, counted hyphens
+     * for a dash, spaced periods for an ellipsis - and that spelling is right under every engine
+     * and font encoding, whereas the literal character depends on both.
      */
     private static final Set<Integer> SPELLED_BY_TEX =
             Set.of((int) '“', (int) '”', (int) '‘', (int) '’', (int) '—', (int) '–', (int) '…');

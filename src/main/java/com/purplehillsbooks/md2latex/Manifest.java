@@ -17,10 +17,10 @@ public record Manifest(
         String subtitle,
         String author,
         String date,
-        Output output,
+        Latex latex,
+        Docusaurus docusaurus,
         Document document,
         CodeStyle codeStyle,
-        Dialect dialect,
         List<String> extraPreamble,
         List<Entry> frontMatter,
         List<Entry> chapters,
@@ -32,6 +32,16 @@ public record Manifest(
      */
     public Path sourceFolder() {
         return manifestFile.getParent();
+    }
+
+    /** True when the manifest asks for a LaTeX book. */
+    public boolean hasLatex() {
+        return latex != null;
+    }
+
+    /** True when the manifest asks for a Docusaurus docs section. */
+    public boolean hasDocusaurus() {
+        return docusaurus != null;
     }
 
     /**
@@ -48,8 +58,8 @@ public record Manifest(
                 .toList();
     }
 
-    /** Where the generated LaTeX is written. */
-    public record Output(Path directory, String mainFile) {
+    /** Where the generated LaTeX is written. Absent when the manifest asks for no LaTeX. */
+    public record Latex(Path directory, String mainFile) {
 
         /** Absolute path of the master .tex file. */
         public Path mainPath() {
@@ -59,6 +69,31 @@ public record Manifest(
         /** Absolute path of the directory holding per-chapter .tex files. */
         public Path chapterPath() {
             return directory.resolve("chapters");
+        }
+    }
+
+    /**
+     * Where the generated Docusaurus Markdown is written, and how.
+     *
+     * <p>{@code directory} is a folder inside a Docusaurus site's {@code docs} tree, and everything
+     * in it is generated: the chapter files, a {@code _category_.json} naming the section, and
+     * copies of whatever images the chapters refer to. Nothing of the Markua source is left in it,
+     * which is the point - the two trees stay separate and only one of them is hand edited.
+     *
+     * @param category label for the generated {@code _category_.json}; defaults to the book title
+     * @param position sidebar position of the section itself, or null to leave it unset
+     * @param format value written into each file's {@code format:} front matter key. {@code md}
+     *     parses the file as CommonMark rather than MDX, which matters because prose that is
+     *     perfectly ordinary in a book - a stray brace, a less-than sign - is JSX to MDX and fails
+     *     the site build. {@code none} omits the key for a Docusaurus too old to know it.
+     * @param assets whether images and other referenced files are copied into the output tree
+     */
+    public record Docusaurus(
+            Path directory, String category, Integer position, String format, boolean assets) {
+
+        /** True when a {@code format:} key should be written into each file's front matter. */
+        public boolean writesFormat() {
+            return !"none".equals(format);
         }
     }
 

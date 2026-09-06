@@ -65,16 +65,16 @@ public final class Main {
 
     private static int build(Options opts) throws Exception {
         Path manifestFile = ManifestReader.locate(opts.manifest);
-        Manifest manifest = ManifestReader.read(manifestFile);
+        Manifest manifest = ManifestReader.readManifest(manifestFile);
 
-        BookBuilder.Result result = new BookBuilder(manifest).build();
+        Build.Result result = Build.run(manifest, opts.targets);
 
         if (opts.verbose) {
             System.out.println("Manifest: " + manifestFile);
             System.out.println("Sources:  " + manifest.sourceFolder());
             System.out.println();
-            for (Path chapter : result.chapterFiles()) {
-                System.out.println("  " + relative(manifest.output().directory(), chapter));
+            for (Path file : result.written()) {
+                System.out.println("  " + relative(manifest.sourceFolder(), file));
             }
             System.out.println();
         }
@@ -88,23 +88,43 @@ public final class Main {
             System.err.println();
         }
 
+        if (result.targets().contains(Target.LATEX)) {
+            reportLatex(manifest, result);
+        }
+        if (result.targets().contains(Target.DOCUSAURUS)) {
+            reportDocusaurus(manifest, result);
+        }
+        return 0;
+    }
+
+    private static void reportLatex(Manifest manifest, Build.Result result) {
+        Manifest.Latex latex = manifest.latex();
         System.out.println(
                 "Wrote "
-                        + result.chapterFiles().size()
+                        + result.latexChapters().size()
                         + " chapter file(s) and 1 master document to "
-                        + manifest.output().directory());
+                        + latex.directory());
 
-        String main = manifest.output().mainFile();
+        String main = latex.mainFile();
         String jobName = main.endsWith(".tex") ? main.substring(0, main.length() - 4) : main;
-        System.out.print(
-                "Build with:  cd \"" + manifest.output().directory() + "\" && pdflatex " + main);
+        System.out.print("Build with:  cd \"" + latex.directory() + "\" && pdflatex " + main);
         if (result.hasIndex()) {
             // An index needs makeindex between two pdflatex runs; one pass
             // alone leaves the index empty.
             System.out.print(" && makeindex " + jobName + " && pdflatex " + main);
         }
         System.out.println();
-        return 0;
+    }
+
+    private static void reportDocusaurus(Manifest manifest, Build.Result result) {
+        System.out.println(
+                "Wrote "
+                        + result.docusaurusFiles().size()
+                        + " page(s) and "
+                        + result.assetCount()
+                        + " supporting file(s) to "
+                        + manifest.docusaurus().directory());
+        System.out.println("Everything in that folder is generated; edit the Markua instead.");
     }
 
     private static int scaffold(Options opts) throws IOException {
@@ -114,10 +134,15 @@ public final class Main {
         return 0;
     }
 
+    /**
+     * A written file named the way the author thinks of it: relative to the folder holding the
+     * manifest, which is where every path in the manifest is relative to as well.
+     */
     private static String relative(Path base, Path file) {
         try {
             return base.relativize(file).toString().replace('\\', '/');
         } catch (IllegalArgumentException e) {
+            // Different roots on Windows; the full path is the best we can do.
             return file.toString();
         }
     }

@@ -67,10 +67,10 @@ public final class LatexEscaper {
      * Keeps two quotation marks that meet from ligating into one wrong mark.
      *
      * <p>TeX reads runs of backticks and apostrophes greedily and left to right, so the closing
-     * single quote of a nested quotation followed by the closing double quote around it - {@code
-     * '} then {@code ''} - is read as {@code ''} then {@code '} and prints the two marks in the
-     * wrong order. A thin space between them settles it, and is what a typesetter would put there
-     * in any case.
+     * single quote of a nested quotation followed by the closing double quote around it - {@code '}
+     * then {@code ''} - is read as {@code ''} then {@code '} and prints the two marks in the wrong
+     * order. A thin space between them settles it, and is what a typesetter would put there in any
+     * case.
      *
      * <p>Only marks that meet across a boundary are separated. The two backticks within a single
      * opening quote are meant to ligate and are appended as one unit, so they never reach here.

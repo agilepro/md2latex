@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.purplehillsbooks.exception.CommonException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -34,12 +35,17 @@ class ManifestReaderTest {
 
     private Manifest read(String yaml) throws Exception {
         Path m = write("docs/book.manifest", yaml);
-        return ManifestReader.read(m);
+        return ManifestReader.readManifest(m);
     }
 
     private String errorFrom(String yaml) throws IOException {
         Path m = write("docs/book.manifest", yaml);
-        return assertThrows(ManifestException.class, () -> ManifestReader.read(m)).getMessage();
+        try {
+            ManifestReader.readManifest(m);
+            throw CommonException.newBasic("did not receive an exception for " + m + ":\n" + yaml);
+        } catch (Exception e) {
+            return CommonException.getFullMessage(e);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -62,43 +68,124 @@ class ManifestReaderTest {
         assertEquals(2, m.chapters().size());
         assertEquals(tmp.resolve("docs"), m.sourceFolder());
 
-        assertEquals(tmp.resolve("docs/latex"), m.output().directory());
-        assertEquals("book.tex", m.output().mainFile());
-        assertEquals(tmp.resolve("docs/latex/chapters"), m.output().chapterPath());
+        assertEquals(tmp.resolve("docs/latex"), m.latex().directory());
+        assertEquals("book.tex", m.latex().mainFile());
+        assertEquals(tmp.resolve("docs/latex/chapters"), m.latex().chapterPath());
 
         assertEquals("book", m.document().documentClass());
         assertTrue(m.document().toc());
         assertTrue(m.document().hasChapters());
         assertEquals(CodeStyle.LISTINGS, m.codeStyle());
-        // Markua syntax is off unless asked for, so existing books are unaffected.
-        assertEquals(Dialect.DOCUSAURUS, m.dialect());
+        // Saying nothing about targets means a LaTeX book, as it always did.
+        assertTrue(m.hasLatex());
+        assertFalse(m.hasDocusaurus());
     }
 
     @Test
-    void dialectSelectsMarkua() throws Exception {
-        Manifest m =
-                read(
+    void dialectIsRejectedWithAnExplanation() throws IOException {
+        String message =
+                errorFrom(
                         """
                 title: X
                 dialect: markua
                 chapters:
                   - one.md
                 """);
-        assertEquals(Dialect.MARKUA, m.dialect());
+        assertTrue(message.contains("no longer used"), message);
+        assertTrue(message.contains("Markua"), message);
     }
 
     @Test
-    void unknownDialectIsRejected() throws IOException {
+    void docusaurusBlockNamesItsOwnOutput() throws Exception {
+        Manifest m =
+                read(
+                        """
+                title: X
+                docusaurus:
+                  directory: ../site/docs/x
+                  category: The Book
+                  position: 4
+                  format: mdx
+                  assets: false
+                chapters:
+                  - one.md
+                """);
+        assertTrue(m.hasDocusaurus());
+        // Naming only the site means only the site is built.
+        assertFalse(m.hasLatex());
+        assertEquals(tmp.resolve("site/docs/x"), m.docusaurus().directory());
+        assertEquals("The Book", m.docusaurus().category());
+        assertEquals(4, m.docusaurus().position());
+        assertEquals("mdx", m.docusaurus().format());
+        assertFalse(m.docusaurus().assets());
+    }
+
+    @Test
+    void docusaurusDefaultsToTheBookTitleAndCommonMark() throws Exception {
+        Manifest m =
+                read(
+                        """
+                title: Essentials
+                latex:
+                  directory: tex
+                docusaurus:
+                  directory: site
+                chapters:
+                  - one.md
+                """);
+        // Naming both means both are built.
+        assertTrue(m.hasLatex());
+        assertTrue(m.hasDocusaurus());
+        assertEquals("Essentials", m.docusaurus().category());
+        assertEquals("md", m.docusaurus().format());
+        assertTrue(m.docusaurus().assets());
+        assertNull(m.docusaurus().position());
+        assertEquals(tmp.resolve("docs/tex"), m.latex().directory());
+    }
+
+    @Test
+    void docusaurusNeedsADirectory() throws IOException {
         String message =
                 errorFrom(
                         """
                 title: X
-                dialect: asciidoc
+                docusaurus:
+                  category: Whatever
                 chapters:
                   - one.md
                 """);
-        assertTrue(message.contains("docusaurus"), message);
-        assertTrue(message.contains("markua"), message);
+        assertTrue(message.contains("docusaurus.directory"), message);
+    }
+
+    @Test
+    void unknownDocusaurusFormatIsRejected() throws IOException {
+        String message =
+                errorFrom(
+                        """
+                title: X
+                docusaurus:
+                  directory: site
+                  format: asciidoc
+                chapters:
+                  - one.md
+                """);
+        assertTrue(message.contains("format"), message);
+    }
+
+    @Test
+    void latexAndOutputCannotBothBeGiven() throws IOException {
+        String message =
+                errorFrom(
+                        """
+                title: X
+                latex:
+                  directory: a
+                output:
+                  directory: b
+                chapters:
+                  - one.md
+                """);
+        assertTrue(message.contains("delete"), message.toLowerCase());
     }
 
     @Test
@@ -128,9 +215,9 @@ class ManifestReaderTest {
         assertEquals("A Subtitle", m.subtitle());
         assertEquals("Someone", m.author());
         assertEquals("August 2026", m.date());
-        assertEquals(tmp.resolve("docs/out/tex"), m.output().directory());
+        assertEquals(tmp.resolve("docs/out/tex"), m.latex().directory());
         // A missing .tex extension is supplied rather than rejected.
-        assertEquals("main.tex", m.output().mainFile());
+        assertEquals("main.tex", m.latex().mainFile());
         assertEquals("article", m.document().documentClass());
         assertFalse(m.document().hasChapters());
         assertFalse(m.document().toc());

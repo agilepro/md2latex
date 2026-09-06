@@ -27,7 +27,6 @@ public final class Md2Latex {
     private final boolean bookClass;
     private final List<Problem> problems;
     private final IndexTerms indexTerms;
-    private final Dialect dialect;
 
     public Md2Latex(CodeStyle codeStyle, boolean bookClass, List<Problem> problems) {
         this(codeStyle, bookClass, problems, IndexTerms.none());
@@ -35,20 +34,10 @@ public final class Md2Latex {
 
     public Md2Latex(
             CodeStyle codeStyle, boolean bookClass, List<Problem> problems, IndexTerms indexTerms) {
-        this(codeStyle, bookClass, problems, indexTerms, Dialect.DOCUSAURUS);
-    }
-
-    public Md2Latex(
-            CodeStyle codeStyle,
-            boolean bookClass,
-            List<Problem> problems,
-            IndexTerms indexTerms,
-            Dialect dialect) {
         this.codeStyle = codeStyle;
         this.bookClass = bookClass;
         this.problems = problems;
         this.indexTerms = indexTerms;
-        this.dialect = dialect;
         this.parser =
                 Parser.builder()
                         .extensions(
@@ -87,7 +76,7 @@ public final class Md2Latex {
      */
     public Converted convert(
             String markdown, Path sourceFile, Path outputDir, String titleOverride) {
-        MarkdownLoader.Result pre = MarkdownLoader.process(markdown, dialect);
+        MarkdownLoader.Result pre = MarkdownLoader.process(markdown, new LatexMarkerSink());
         Node document = parser.parse(pre.body());
 
         RenderContext ctx =

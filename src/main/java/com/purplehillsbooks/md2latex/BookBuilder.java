@@ -2,13 +2,9 @@ package com.purplehillsbooks.md2latex;
 
 import com.purplehillsbooks.streams.MemFile;
 import java.io.Writer;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -32,18 +28,19 @@ import java.util.Map;
 public final class BookBuilder {
 
     private final Manifest manifest;
-    private final List<Problem> problems = new ArrayList<>();
+    private final List<Problem> problems;
 
-    public BookBuilder(Manifest manifest) {
+    public BookBuilder(Manifest manifest, List<Problem> problems) {
         this.manifest = manifest;
+        this.problems = problems;
     }
 
     /**
-     * What was written, plus any non-fatal remarks. {@code hasIndex} tells the caller whether the
-     * build needs a makeindex run between pdflatex passes.
+     * What the build intends to write. {@code hasIndex} tells the caller whether the book needs a
+     * makeindex run between pdflatex passes.
      */
-    public record Result(
-            Path mainFile, List<Path> chapterFiles, List<Problem> warnings, boolean hasIndex) {}
+    public record Plan(
+            BuildPlan writes, Path mainFile, List<Path> chapterFiles, boolean hasIndex) {}
 
     /** One converted chapter, held until the whole book is known to be sound. */
     private record Pending(Path target, String contents, String inputPath) {}
@@ -54,16 +51,15 @@ public final class BookBuilder {
      */
     private record Section(List<Manifest.Entry> entries, String opener) {}
 
-    public Result build() throws Exception {
-        Manifest.Output out = manifest.output();
+    /**
+     * @param sources file contents, already read once by the caller so both targets share the read
+     */
+    public Plan plan(Map<Path, String> sources) throws Exception {
+        Manifest.Latex out = manifest.latex();
 
-        // Read every chapter once, up front. Index terms are book-wide, so the
-        // whole set must be known before the first chapter is converted.
+        // Index terms are book-wide, so the whole set must be known before the
+        // first chapter is converted.
         List<Manifest.Entry> allSources = manifest.sourceEntries();
-        Map<Path, String> sources = new LinkedHashMap<>();
-        for (Manifest.Entry entry : allSources) {
-            sources.put(entry.file(), Files.readString(entry.file(), StandardCharsets.UTF_8));
-        }
         IndexTerms indexTerms = IndexTerms.collect(allSources, sources, problems);
 
         Md2Latex converter =
@@ -71,8 +67,7 @@ public final class BookBuilder {
                         manifest.codeStyle(),
                         manifest.document().hasChapters(),
                         problems,
-                        indexTerms,
-                        manifest.dialect());
+                        indexTerms);
 
         int width = Math.max(2, String.valueOf(allSources.size()).length());
 
@@ -141,7 +136,7 @@ public final class BookBuilder {
                                     + latex;
                 }
 
-                String stem = chapterFileStem(index, width, source);
+                String stem = String.format("%0" + width + "d-%s", index, Slug.ofFile(source));
                 Path target = out.chapterPath().resolve(stem + ".tex");
                 pending.add(
                         new Pending(target, chapterHeader(source) + latex, inputPath(out, target)));
@@ -166,19 +161,11 @@ public final class BookBuilder {
                                     + "does not match 'tribes'"));
         }
 
-        // Nothing is written until the whole book is known to convert cleanly.
-        if (problems.stream().anyMatch(Problem::isError)) {
-            throw new ConversionException(problems);
-        }
-
-        Files.createDirectories(out.directory());
-        Files.createDirectories(out.chapterPath());
-
-        List<Path> written = new ArrayList<>();
+        BuildPlan writes = new BuildPlan();
+        List<Path> chapterFiles = new ArrayList<>();
         for (Pending p : pending) {
-            Files.writeString(p.target(), p.contents(), StandardCharsets.UTF_8);
-            written.add(p.target());
-            System.out.println("Wrote file " + p.target());
+            writes.add(p.target(), p.contents());
+            chapterFiles.add(p.target());
         }
 
         MemFile mainDocument = new MemFile();
@@ -189,43 +176,17 @@ public final class BookBuilder {
         Preamble.endTheBook(manifest, mainWriter);
         mainWriter.close();
 
-        Files.writeString(out.mainPath(), mainDocument.toString(), StandardCharsets.UTF_8);
+        writes.add(out.mainPath(), mainDocument.toString());
 
-        return new Result(out.mainPath(), written, List.copyOf(problems), true);
+        return new Plan(writes, out.mainPath(), chapterFiles, true);
     }
 
     private String chapterHeader(Path source) {
         return "% Generated from " + source.getFileName() + " - do not edit.\n\n";
     }
 
-    /**
-     * {@code 01-introduction} style names: ordered on disk, and safe to hand to {@code \input}
-     * without escaping.
-     */
-    private static String chapterFileStem(int index, int width, Path source) {
-        String name = source.getFileName().toString();
-        int dot = name.lastIndexOf('.');
-        String stem = dot > 0 ? name.substring(0, dot) : name;
-
-        StringBuilder safe = new StringBuilder();
-        for (char c : stem.toLowerCase(Locale.ROOT).toCharArray()) {
-            if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
-                safe.append(c);
-            } else if (!safe.isEmpty() && safe.charAt(safe.length() - 1) != '-') {
-                safe.append('-');
-            }
-        }
-        while (!safe.isEmpty() && safe.charAt(safe.length() - 1) == '-') {
-            safe.setLength(safe.length() - 1);
-        }
-        if (safe.isEmpty()) {
-            safe.append("chapter");
-        }
-        return String.format("%0" + width + "d-%s", index, safe);
-    }
-
     /** Path for {@code \input}, relative to the master file, without extension. */
-    private static String inputPath(Manifest.Output out, Path chapterFile) {
+    private static String inputPath(Manifest.Latex out, Path chapterFile) {
         String relative = out.directory().relativize(chapterFile).toString().replace('\\', '/');
         return relative.endsWith(".tex") ? relative.substring(0, relative.length() - 4) : relative;
     }
