@@ -1,5 +1,6 @@
 package com.purplehillsbooks.md2latex;
 
+import com.purplehillsbooks.exception.CommonException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -38,7 +39,7 @@ public final class Build {
      * @throws ConversionException when the Markdown would produce output that does not work, in
      *     which case nothing at all has been written
      */
-    public static Result run(Manifest manifest, Set<Target> wanted) throws Exception {
+    public static Result generateOutputFiles(Manifest manifest, Set<Target> wanted) throws Exception {
         Set<Target> targets = resolve(manifest, wanted);
 
         // Read every chapter once. Both targets want the same bytes, and the
@@ -87,8 +88,7 @@ public final class Build {
      * <p>Asking for a target the manifest says nothing about is a mistake worth naming, because the
      * alternative is a run that reports success having produced nothing.
      */
-    private static Set<Target> resolve(Manifest manifest, Set<Target> wanted)
-            throws ManifestException {
+    private static Set<Target> resolve(Manifest manifest, Set<Target> wanted) {
         Set<Target> available = EnumSet.noneOf(Target.class);
         if (manifest.hasLatex()) {
             available.add(Target.LATEX);
@@ -101,7 +101,7 @@ public final class Build {
         }
         for (Target t : wanted) {
             if (!available.contains(t)) {
-                throw new ManifestException(
+                throw CommonException.newBasic(
                         manifest.manifestFile().getFileName()
                                 + ": --target "
                                 + t

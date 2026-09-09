@@ -67,7 +67,7 @@ public final class Main {
         Path manifestFile = ManifestReader.locate(opts.manifest);
         Manifest manifest = ManifestReader.readManifest(manifestFile);
 
-        Build.Result result = Build.run(manifest, opts.targets);
+        Build.Result result = Build.generateOutputFiles(manifest, opts.targets);
 
         if (opts.verbose) {
             System.out.println("Manifest: " + manifestFile);

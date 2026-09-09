@@ -1,5 +1,7 @@
 package com.purplehillsbooks.md2latex;
 
+import com.purplehillsbooks.exception.CommonException;
+
 /** How fenced code blocks should be rendered. */
 public enum CodeStyle {
 
@@ -21,16 +23,14 @@ public enum CodeStyle {
      */
     VERBATIM;
 
-    public static CodeStyle parse(String s) {
+    public static CodeStyle parseOrFail(String s) {
         return switch (s.toLowerCase()) {
             case "listings", "lstlisting" -> LISTINGS;
             case "minted" -> MINTED;
             case "verbatim" -> VERBATIM;
             default ->
-                    throw new IllegalArgumentException(
-                            "Unknown code style '"
-                                    + s
-                                    + "' (expected listings, minted or verbatim)");
+                    throw CommonException.newBasic(
+                            "Unknown code style '%s' (expected listings, minted or verbatim)", s);
         };
     }
 }

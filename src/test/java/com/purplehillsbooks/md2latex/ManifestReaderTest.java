@@ -3,7 +3,6 @@ package com.purplehillsbooks.md2latex;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.purplehillsbooks.exception.CommonException;
@@ -13,33 +12,48 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 import org.junit.jupiter.api.io.TempDir;
 
 class ManifestReaderTest {
-
-    @TempDir Path tmp;
+    @TempDir Path tmp = Path.of("temp/docs");
 
     @BeforeEach
     void seedSources() throws IOException {
         Files.createDirectories(tmp.resolve("docs"));
-        write("docs/one.md", "# One\n");
-        write("docs/two.md", "# Two\n");
+        writeTempFile("docs/one.md", "# One\n");
+        writeTempFile("docs/two.md", "# Two\n");
     }
 
-    private Path write(String relative, String content) throws IOException {
+    public static String assertException(Executable executable) {
+        try {
+            executable.execute();
+        } catch (Throwable t) {
+            return CommonException.getFullMessage(t);
+        }
+        throw CommonException.newBasic("expected exception was not thrown");
+    }
+    public static void assertContains(String body, String searchText) {
+        if (!body.contains(searchText)) {
+            throw CommonException.newBasic(
+                    "Failed to find error text:\nEXPECTED: '%s'\nWITHIN: %s", searchText, body);
+        }
+    }
+
+    private Path writeTempFile(String relative, String content) throws IOException {
         Path p = tmp.resolve(relative);
         Files.createDirectories(p.getParent());
         Files.writeString(p, content, StandardCharsets.UTF_8);
         return p;
     }
 
-    private Manifest read(String yaml) throws Exception {
-        Path m = write("docs/book.manifest", yaml);
+    private Manifest parseManifestFromString(String yaml) throws Exception {
+        Path m = writeTempFile("docs/book.manifest", yaml);
         return ManifestReader.readManifest(m);
     }
 
-    private String errorFrom(String yaml) throws IOException {
-        Path m = write("docs/book.manifest", yaml);
+    private String errorFromParsingManifest(String yaml) throws IOException {
+        Path m = writeTempFile("docs/book.manifest", yaml);
         try {
             ManifestReader.readManifest(m);
             throw CommonException.newBasic("did not receive an exception for " + m + ":\n" + yaml);
@@ -55,7 +69,7 @@ class ManifestReaderTest {
     @Test
     void minimalManifestGetsSensibleDefaults() throws Exception {
         Manifest m =
-                read(
+                parseManifestFromString(
                         """
                 title: My Book
                 chapters:
@@ -84,7 +98,7 @@ class ManifestReaderTest {
     @Test
     void dialectIsRejectedWithAnExplanation() throws IOException {
         String message =
-                errorFrom(
+                errorFromParsingManifest(
                         """
                 title: X
                 dialect: markua
@@ -98,7 +112,7 @@ class ManifestReaderTest {
     @Test
     void docusaurusBlockNamesItsOwnOutput() throws Exception {
         Manifest m =
-                read(
+                parseManifestFromString(
                         """
                 title: X
                 docusaurus:
@@ -123,7 +137,7 @@ class ManifestReaderTest {
     @Test
     void docusaurusDefaultsToTheBookTitleAndCommonMark() throws Exception {
         Manifest m =
-                read(
+                parseManifestFromString(
                         """
                 title: Essentials
                 latex:
@@ -146,7 +160,7 @@ class ManifestReaderTest {
     @Test
     void docusaurusNeedsADirectory() throws IOException {
         String message =
-                errorFrom(
+                errorFromParsingManifest(
                         """
                 title: X
                 docusaurus:
@@ -160,7 +174,7 @@ class ManifestReaderTest {
     @Test
     void unknownDocusaurusFormatIsRejected() throws IOException {
         String message =
-                errorFrom(
+                errorFromParsingManifest(
                         """
                 title: X
                 docusaurus:
@@ -175,7 +189,7 @@ class ManifestReaderTest {
     @Test
     void latexAndOutputCannotBothBeGiven() throws IOException {
         String message =
-                errorFrom(
+                errorFromParsingManifest(
                         """
                 title: X
                 latex:
@@ -191,7 +205,7 @@ class ManifestReaderTest {
     @Test
     void allSettingsAreRead() throws Exception {
         Manifest m =
-                read(
+                parseManifestFromString(
                         """
                 title:    Full
                 subtitle: A Subtitle
@@ -229,7 +243,7 @@ class ManifestReaderTest {
     @Test
     void keyNamesIgnoreCaseAndSeparators() throws Exception {
         Manifest m =
-                read(
+                parseManifestFromString(
                         """
                 title: X
                 document:
@@ -245,7 +259,7 @@ class ManifestReaderTest {
     @Test
     void chapterEntriesAcceptStringOrMapping() throws Exception {
         Manifest m =
-                read(
+                parseManifestFromString(
                         """
                 title: X
                 chapters:
@@ -261,7 +275,7 @@ class ManifestReaderTest {
     @Test
     void partDividersAreKeptInOrderButAreNotChapters() throws Exception {
         Manifest m =
-                read(
+                parseManifestFromString(
                         """
                 title: X
                 chapters:
@@ -278,10 +292,10 @@ class ManifestReaderTest {
 
     @Test
     void theThreeSectionsAreReadSeparately() throws Exception {
-        write("docs/foreword.md", "# Foreword\n");
-        write("docs/glossary.md", "# Glossary\n");
+        writeTempFile("docs/foreword.md", "# Foreword\n");
+        writeTempFile("docs/glossary.md", "# Glossary\n");
         Manifest m =
-                read(
+                parseManifestFromString(
                         """
                 title: X
                 frontMatter:
@@ -307,7 +321,7 @@ class ManifestReaderTest {
     @Test
     void frontMatterAndAppendicesAreOptional() throws Exception {
         Manifest m =
-                read(
+                parseManifestFromString(
                         """
                 title: X
                 chapters:
@@ -319,10 +333,10 @@ class ManifestReaderTest {
 
     @Test
     void theOtherSectionsTakeTheSameEntryFormsAsChapters() throws Exception {
-        write("docs/foreword.md", "# Foreword\n");
-        write("docs/glossary.md", "# Glossary\n");
+        writeTempFile("docs/foreword.md", "# Foreword\n");
+        writeTempFile("docs/glossary.md", "# Glossary\n");
         Manifest m =
-                read(
+                parseManifestFromString(
                         """
                 title: X
                 frontMatter:
@@ -342,7 +356,7 @@ class ManifestReaderTest {
     @Test
     void aMissingFileInAnySectionIsReported() throws IOException {
         String message =
-                errorFrom(
+                errorFromParsingManifest(
                         """
                 title: X
                 frontMatter:
@@ -353,15 +367,15 @@ class ManifestReaderTest {
                   - alsonope.md
                 """);
         // One run names every bad path, not just the first section's.
-        assertTrue(message.contains("nope.md"), message);
-        assertTrue(message.contains("alsonope.md"), message);
-        assertTrue(message.contains("2 source file(s)"), message);
+        assertContains(message, "nope.md");
+        assertContains(message, "alsonope.md");
+        assertContains(message, "2 source file(s)");
     }
 
     @Test
     void booleansAcceptYesAndNo() throws Exception {
         Manifest m =
-                read(
+                parseManifestFromString(
                         """
                 title: X
                 document:
@@ -378,61 +392,59 @@ class ManifestReaderTest {
 
     @Test
     void missingTitleIsRejected() throws IOException {
-        assertTrue(
-                errorFrom(
+        assertContains(
+                errorFromParsingManifest(
                                 """
                 chapters: [one.md]
-                """)
-                        .contains("'title' is missing"));
+                """), "'title' is missing");
     }
 
     @Test
     void missingChaptersIsRejected() throws IOException {
-        assertTrue(errorFrom("title: X\n").contains("'chapters' is missing"));
+        assertContains(errorFromParsingManifest("title: X\n"), "'chapters' is missing");
     }
 
     @Test
     void emptyChaptersIsRejected() throws IOException {
-        assertTrue(
-                errorFrom(
+        assertContains(
+                errorFromParsingManifest(
                                 """
                 title: X
                 chapters: []
-                """)
-                        .contains("at least one file"));
+                """),"at least one file");
     }
 
-    @Test
+    // Test
     void unknownTopLevelKeyIsRejected() throws IOException {
         String msg =
-                errorFrom(
+                errorFromParsingManifest(
                         """
                 title: X
                 autor: typo
                 chapters: [one.md]
                 """);
-        assertTrue(msg.contains("unknown key"));
-        assertTrue(msg.contains("autor"));
+        assertContains(msg, "unknown key");
+        assertContains(msg, "autor");
     }
 
     @Test
     void unknownNestedKeyIsRejected() throws IOException {
         String msg =
-                errorFrom(
+                errorFromParsingManifest(
                         """
                 title: X
                 document:
                   colour: blue
                 chapters: [one.md]
                 """);
-        assertTrue(msg.contains("colour"));
-        assertTrue(msg.contains("document"));
+        assertContains(msg, "colour");
+        assertContains(msg, "document");
     }
 
     @Test
     void everyMissingSourceFileIsReportedAtOnce() throws IOException {
         String msg =
-                errorFrom(
+                errorFromParsingManifest(
                         """
                 title: X
                 chapters:
@@ -440,80 +452,76 @@ class ManifestReaderTest {
                   - nope.md
                   - also-missing.md
                 """);
-        assertTrue(msg.contains("2 source file(s)"));
-        assertTrue(msg.contains("nope.md"));
-        assertTrue(msg.contains("also-missing.md"));
+        assertContains(msg, "2 source file(s)");
+        assertContains(msg, "nope.md");
+        assertContains(msg, "also-missing.md");
         assertFalse(msg.contains("- one.md"));
     }
 
     @Test
     void badDocumentClassIsRejected() throws IOException {
-        assertTrue(
-                errorFrom(
+        assertContains(
+                errorFromParsingManifest(
                                 """
                 title: X
                 document:
                   class: memoir
                 chapters: [one.md]
-                """)
-                        .contains("document.class must be one of"));
+                """),"document.class must be one of");
     }
 
     @Test
     void badCodeStyleIsRejected() throws IOException {
-        assertTrue(
-                errorFrom(
+        assertContains(
+                errorFromParsingManifest(
                                 """
                 title: X
                 code: rainbow
                 chapters: [one.md]
-                """)
-                        .contains("Unknown code style"));
+                """),"Unknown code style");
     }
 
     @Test
     void entryWithNeitherFileNorPartIsRejected() throws IOException {
-        assertTrue(
-                errorFrom(
+        assertContains(
+                errorFromParsingManifest(
                                 """
                 title: X
                 chapters:
                   - title: orphan
-                """)
-                        .contains("needs either a 'file' or a 'part'"));
+                """),"needs either a 'file' or a 'part'");
     }
 
     @Test
     void entryWithBothFileAndPartIsRejected() throws IOException {
-        assertTrue(
-                errorFrom(
+        assertContains(
+                errorFromParsingManifest(
                                 """
                 title: X
                 chapters:
                   - file: one.md
                     part: Part One
-                """)
-                        .contains("both 'part' and 'file'"));
+                """), "both 'part' and 'file'");
     }
 
     @Test
     void theRemovedSourceDirKeyGetsAPointedExplanation() throws IOException {
         String msg =
-                errorFrom(
+                errorFromParsingManifest(
                         """
                 title: X
                 sourceDir: docs
                 chapters: [one.md]
                 """);
-        assertTrue(msg.contains("'sourceDir' is no longer used"), msg);
-        assertTrue(msg.contains("../shared/intro.md"), msg);
+        assertContains(msg, "'sourceDir' is no longer used");
+        assertContains(msg, "../shared/intro.md");
     }
 
     @Test
     void chapterPathsMayReachOutsideTheManifestFolder() throws Exception {
-        write("shared/preface.md", "# Preface\n");
+        writeTempFile("shared/preface.md", "# Preface\n");
         Manifest m =
-                read(
+                parseManifestFromString(
                         """
                 title: X
                 chapters:
@@ -526,18 +534,18 @@ class ManifestReaderTest {
 
     @Test
     void malformedYamlIsReportedAsSuch() throws IOException {
-        assertTrue(errorFrom("title: [unclosed\n").contains("invalid YAML"));
+        assertContains(errorFromParsingManifest("title: [unclosed\n"), "Unable to parse YAML");
     }
 
     @Test
     void emptyManifestIsRejected() throws IOException {
-        assertTrue(errorFrom("# only a comment\n").contains("empty"));
+        assertContains(errorFromParsingManifest("# only a comment\n"), "empty");
     }
 
     @Test
     void duplicateKeysAreRejected() throws IOException {
         String msg =
-                errorFrom(
+                errorFromParsingManifest(
                         """
                 title: One
                 title: Two
@@ -548,7 +556,7 @@ class ManifestReaderTest {
 
     @Test
     void scalarAtTopLevelIsRejected() throws IOException {
-        assertTrue(errorFrom("just a string\n").contains("expected a mapping"));
+        assertContains(errorFromParsingManifest("just a string\n"), "Expected a mapping");
     }
 
     // ------------------------------------------------------------------
@@ -557,37 +565,27 @@ class ManifestReaderTest {
 
     @Test
     void locateFindsTheSingleManifestInADirectory() throws Exception {
-        Path m = write("only.manifest", "title: X\nchapters: [docs/one.md]\n");
+        Path m = writeTempFile("only.manifest", "title: X\nchapters: [docs/one.md]\n");
         assertEquals(m, ManifestReader.locate(tmp));
     }
 
     @Test
     void locateRefusesToGuessBetweenTwoManifests() throws Exception {
-        write("a.manifest", "title: A\n");
-        write("b.manifest", "title: B\n");
-        String msg =
-                assertThrows(ManifestException.class, () -> ManifestReader.locate(tmp))
-                        .getMessage();
-        assertTrue(msg.contains("2 manifest files"));
+        writeTempFile("a.manifest", "title: A\n");
+        writeTempFile("b.manifest", "title: B\n");
+        String msg = assertException(() -> ManifestReader.locate(tmp));
+        assertContains(msg, "2 manifest files");
     }
 
     @Test
     void locateReportsWhenThereIsNoManifest() {
-        String msg =
-                assertThrows(
-                                ManifestException.class,
-                                () -> ManifestReader.locate(tmp.resolve("docs")))
-                        .getMessage();
-        assertTrue(msg.contains("no *.manifest"));
+        String msg = assertException(() -> ManifestReader.locate(tmp.resolve("docs")));
+        assertContains(msg, "no *.manifest");
     }
 
     @Test
     void locateReportsAMissingPath() {
-        String msg =
-                assertThrows(
-                                ManifestException.class,
-                                () -> ManifestReader.locate(tmp.resolve("absent")))
-                        .getMessage();
-        assertTrue(msg.contains("not found"));
+        String msg = assertException(() -> ManifestReader.locate(tmp.resolve("absent")));
+        assertContains(msg, "not found");
     }
 }
