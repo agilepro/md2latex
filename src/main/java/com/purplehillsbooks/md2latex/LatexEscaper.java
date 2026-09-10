@@ -20,6 +20,13 @@ public final class LatexEscaper {
         return text(s, true);
     }
 
+    public static String textLine(String s) {
+        if (s == null || s.isEmpty()) {
+            return "\n\\vspace{0.25in}\n";
+        }
+        return text(s, true) + "\\\\\n";
+    }
+
     /**
      * @param translate when true, characters with a built-in LaTeX equivalent in {@link
      *     CharacterMap} are replaced by it. Pass false for verbatim contexts, where a LaTeX command

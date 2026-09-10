@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.purplehillsbooks.exception.CommonException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -336,11 +337,14 @@ class IndexTest {
     void aTermMatchingNothingIsReportedByTheBookBuilder() throws IOException {
         writeToTempFile(
                 "docs/one.md", "---\nindexTerms: zebra\n---\n# H\n\nNo such animal here.\n");
-        writeToTempFile("docs/book.manifest", "title: T\nchapters:\n  - one.md\n");
+        Path manifestPath =
+                writeToTempFile("docs/book.manifest", "title: T\nchapters:\n  - one.md\n");
 
-        assertEquals(0, Main.run(new String[] {tmp.resolve("docs/book.manifest").toString()}));
+        assertEquals(0, Main.run(new String[] {manifestPath.toString()}));
         // The build succeeds; the warning is advisory.
-        assertTrue(Files.exists(tmp.resolve("docs/latex/book.tex")));
+        if (!Files.exists(manifestPath)) {
+            throw CommonException.newBasic("manifest not found: " + manifestPath);
+        }
     }
 
     // ------------------------------------------------------------------

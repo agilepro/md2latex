@@ -33,6 +33,7 @@ class ManifestReaderTest {
         }
         throw CommonException.newBasic("expected exception was not thrown");
     }
+
     public static void assertContains(String body, String searchText) {
         if (!body.contains(searchText)) {
             throw CommonException.newBasic(
@@ -394,9 +395,10 @@ class ManifestReaderTest {
     void missingTitleIsRejected() throws IOException {
         assertContains(
                 errorFromParsingManifest(
-                                """
+                        """
                 chapters: [one.md]
-                """), "'title' is missing");
+                """),
+                "'title' is missing");
     }
 
     @Test
@@ -408,10 +410,11 @@ class ManifestReaderTest {
     void emptyChaptersIsRejected() throws IOException {
         assertContains(
                 errorFromParsingManifest(
-                                """
+                        """
                 title: X
                 chapters: []
-                """),"at least one file");
+                """),
+                "at least one file");
     }
 
     // Test
@@ -462,46 +465,50 @@ class ManifestReaderTest {
     void badDocumentClassIsRejected() throws IOException {
         assertContains(
                 errorFromParsingManifest(
-                                """
+                        """
                 title: X
                 document:
                   class: memoir
                 chapters: [one.md]
-                """),"document.class must be one of");
+                """),
+                "document.class must be one of");
     }
 
     @Test
     void badCodeStyleIsRejected() throws IOException {
         assertContains(
                 errorFromParsingManifest(
-                                """
+                        """
                 title: X
                 code: rainbow
                 chapters: [one.md]
-                """),"Unknown code style");
+                """),
+                "Unknown code style");
     }
 
     @Test
     void entryWithNeitherFileNorPartIsRejected() throws IOException {
         assertContains(
                 errorFromParsingManifest(
-                                """
+                        """
                 title: X
                 chapters:
                   - title: orphan
-                """),"needs either a 'file' or a 'part'");
+                """),
+                "needs either a 'file' or a 'part'");
     }
 
     @Test
     void entryWithBothFileAndPartIsRejected() throws IOException {
         assertContains(
                 errorFromParsingManifest(
-                                """
+                        """
                 title: X
                 chapters:
                   - file: one.md
                     part: Part One
-                """), "both 'part' and 'file'");
+                """),
+                "both 'part' and 'file'");
     }
 
     @Test
@@ -566,26 +573,26 @@ class ManifestReaderTest {
     @Test
     void locateFindsTheSingleManifestInADirectory() throws Exception {
         Path m = writeTempFile("only.manifest", "title: X\nchapters: [docs/one.md]\n");
-        assertEquals(m, ManifestReader.locate(tmp));
+        assertEquals(m, ManifestReader.locateMaster(tmp));
     }
 
     @Test
     void locateRefusesToGuessBetweenTwoManifests() throws Exception {
         writeTempFile("a.manifest", "title: A\n");
         writeTempFile("b.manifest", "title: B\n");
-        String msg = assertException(() -> ManifestReader.locate(tmp));
+        String msg = assertException(() -> ManifestReader.locateMaster(tmp));
         assertContains(msg, "2 manifest files");
     }
 
     @Test
     void locateReportsWhenThereIsNoManifest() {
-        String msg = assertException(() -> ManifestReader.locate(tmp.resolve("docs")));
+        String msg = assertException(() -> ManifestReader.locateMaster(tmp.resolve("docs")));
         assertContains(msg, "no *.manifest");
     }
 
     @Test
     void locateReportsAMissingPath() {
-        String msg = assertException(() -> ManifestReader.locate(tmp.resolve("absent")));
+        String msg = assertException(() -> ManifestReader.locateMaster(tmp.resolve("absent")));
         assertContains(msg, "not found");
     }
 }

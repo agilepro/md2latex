@@ -64,7 +64,7 @@ public final class Main {
     // ------------------------------------------------------------------
 
     private static int build(Options opts) throws Exception {
-        Path manifestFile = ManifestReader.locate(opts.manifest);
+        Path manifestFile = ManifestReader.locateMaster(opts.manifest);
         Manifest manifest = ManifestReader.readManifest(manifestFile);
 
         Build.Result result = Build.generateOutputFiles(manifest, opts.targets);

@@ -39,7 +39,8 @@ public final class Build {
      * @throws ConversionException when the Markdown would produce output that does not work, in
      *     which case nothing at all has been written
      */
-    public static Result generateOutputFiles(Manifest manifest, Set<Target> wanted) throws Exception {
+    public static Result generateOutputFiles(Manifest manifest, Set<Target> wanted)
+            throws Exception {
         Set<Target> targets = resolve(manifest, wanted);
 
         // Read every chapter once. Both targets want the same bytes, and the

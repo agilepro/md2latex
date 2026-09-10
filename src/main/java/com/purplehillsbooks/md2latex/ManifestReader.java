@@ -30,6 +30,7 @@ public final class ManifestReader {
                     "title",
                     "subtitle",
                     "author",
+                    "dedication",
                     "date",
                     "latex",
                     "output",
@@ -79,7 +80,7 @@ public final class ManifestReader {
      * <p>A directory is searched for exactly one {@code *.manifest}; anything else is an error,
      * because guessing which book to build would be worse than asking.
      */
-    public static Path locate(Path input) throws ManifestException {
+    public static Path locateMaster(Path input) throws ManifestException {
         if (!Files.exists(input)) {
             throw CommonException.newBasic("manifest not found at: %s", input.toString());
         }
@@ -145,7 +146,8 @@ public final class ManifestReader {
             }
             if (!(root instanceof Map<?, ?> rawMap)) {
                 throw CommonException.newBasic(
-                        "Expected a mapping of settings at the top level of manifest, found %s", typeName(root));
+                        "Expected a mapping of settings at the top level of manifest, found %s",
+                        typeName(root));
             }
 
             String where = file.getFileName().toString();
@@ -156,6 +158,7 @@ public final class ManifestReader {
             String title = topMap.requireString("title");
             String subtitle = topMap.optionalString("subtitle", null);
             String author = topMap.optionalString("author", null);
+            List<String> dedication = topMap.optionalStringList("dedication");
             String date = topMap.optionalString("date", null);
 
             if (topMap.has("latex") && topMap.has("output")) {
@@ -198,6 +201,7 @@ public final class ManifestReader {
                     subtitle,
                     author,
                     date,
+                    dedication,
                     latex,
                     docusaurus,
                     document,
@@ -608,7 +612,11 @@ public final class ManifestReader {
             }
             List<String> result = new ArrayList<>(list.size());
             for (Object item : list) {
-                result.add(String.valueOf(item));
+                if (item == null) {
+                    result.add("");
+                } else {
+                    result.add(String.valueOf(item));
+                }
             }
             return result;
         }

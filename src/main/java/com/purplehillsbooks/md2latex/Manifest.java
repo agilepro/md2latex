@@ -17,6 +17,7 @@ public record Manifest(
         String subtitle,
         String author,
         String date,
+        List<String> dedication,
         Latex latex,
         Docusaurus docusaurus,
         Document document,

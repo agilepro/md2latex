@@ -3,6 +3,7 @@ package com.purplehillsbooks.md2latex;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.purplehillsbooks.exception.CommonException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -10,8 +11,6 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-
-import com.purplehillsbooks.exception.CommonException;
 
 /** The shape of the folder handed to Docusaurus, and what has to travel with it. */
 class DocusaurusBuilderTest {
@@ -79,7 +78,8 @@ class DocusaurusBuilderTest {
 
         assertTrue(Files.isRegularFile(site().resolve("one.md")));
         assertTrue(Files.isRegularFile(site().resolve("part-two/two.md")));
-        ManifestReaderTest.assertContains(read("part-two/_category_.json"), "\"label\": \"Part Two\"");
+        ManifestReaderTest.assertContains(
+                read("part-two/_category_.json"), "\"label\": \"Part Two\"");
         // Numbering restarts inside the part, because Docusaurus orders each
         // folder among its own siblings.
         ManifestReaderTest.assertContains(read("part-two/two.md"), "sidebar_position: 1");
@@ -108,9 +108,11 @@ class DocusaurusBuilderTest {
         Files.createDirectories(tmp.resolve("shared"));
         Files.writeString(tmp.resolve("shared/intro.md"), "# Shared\n");
         writeTempFile("intro.md", "# Mine\n");
-        writeTempFile("book.manifest", SITE_ONLY + "chapters:\n  - intro.md\n  - ../shared/intro.md\n");
+        writeTempFile(
+                "book.manifest", SITE_ONLY + "chapters:\n  - intro.md\n  - ../shared/intro.md\n");
         try {
-            Build.generateOutputFiles(ManifestReader.readManifest(docs.resolve("book.manifest")), null);
+            Build.generateOutputFiles(
+                    ManifestReader.readManifest(docs.resolve("book.manifest")), null);
         } catch (ConversionException expected) {
             assertTrue(expected.getMessage().contains("same page"), expected.getMessage());
             assertFalse(Files.exists(site()), "nothing should be written");
@@ -200,7 +202,8 @@ class DocusaurusBuilderTest {
 
     @Test
     void aLinkToAnotherChapterFollowsItToItsNewName() throws Exception {
-        writeTempFile("one.md", "# One\n\nSee [two](two.md#part) and [out](https://example.com/a.md).\n");
+        writeTempFile(
+                "one.md", "# One\n\nSee [two](two.md#part) and [out](https://example.com/a.md).\n");
         writeTempFile("two.md", "# Two\n");
         build(SITE_ONLY + "chapters:\n  - one.md\n  - part: P\n  - two.md\n");
 
@@ -316,7 +319,9 @@ class DocusaurusBuilderTest {
         try {
             Build.generateOutputFiles(manifest, java.util.EnumSet.of(Target.LATEX));
         } catch (Exception expected) {
-            ManifestReaderTest.assertContains(CommonException.getFullMessage(expected), "the manifest has no 'latex:' section");
+            ManifestReaderTest.assertContains(
+                    CommonException.getFullMessage(expected),
+                    "the manifest has no 'latex:' section");
             return;
         }
         throw new AssertionError("expected a complaint about the missing latex block");
@@ -325,9 +330,10 @@ class DocusaurusBuilderTest {
     @Test
     void theSameSourceReachesBothTargets() throws Exception {
         writeTempFile("one.md", "# One\n\nW> Mind the gap.\n");
-        Path manifestPath = writeTempFile(
-                "book.manifest",
-                """
+        Path manifestPath =
+                writeTempFile(
+                        "book.manifest",
+                        """
                 title: The Book
                 latex:
                   directory: ../out
@@ -341,7 +347,6 @@ class DocusaurusBuilderTest {
         ManifestReaderTest.assertContains(read("one.md"), ":::warning");
         ManifestReaderTest.assertContains(
                 Files.readString(tmp.resolve("out/chapters/01-one.tex"), StandardCharsets.UTF_8),
-                "\\begin{admonition}{Warning}"
-        );
+                "\\begin{admonition}{Warning}");
     }
 }
